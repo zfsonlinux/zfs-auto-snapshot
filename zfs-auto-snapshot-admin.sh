@@ -142,7 +142,7 @@ cat > auto-snapshot-instance.xml <<EOF
 <service
 	name='system/filesystem/zfs/auto-snapshot'
 	type='service'
-	version='1'>
+	version='0.3'>
 	<create_default_instance enabled='false' />
 
 	<instance name='$ESCAPED_NAME' enabled='false' >

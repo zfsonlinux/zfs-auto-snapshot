@@ -12,7 +12,7 @@
 <service
 	name='system/filesystem/zfs/auto-snapshot'
 	type='service'
-	version='1'>
+	version='0.3'>
 
 	<!-- no point in being able to take snapshots if we don't have a fs -->
 	<dependency

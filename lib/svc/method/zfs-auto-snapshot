@@ -1,9 +1,34 @@
 #!/usr/bin/ksh
 
 #
-# Copyright 2004 Sun Microsystems, Inc.  All rights reserved.
+# Copyright 2006 Sun Microsystems, Inc.  All rights reserved.
 # Use is subject to license terms.
 #
+
+
+#
+# This SMF method takes snapshots periodically of a zfs filesystem, with
+# options to allow the user to keep a limited number of snapshots, or snapshot
+# all child datasets. More documentation available at
+# http://blogs.sun.com/timf
+#
+# The service will move itself into maintenance if it's unable to take a snapshot,
+# destroy a snapshot as per the snapshot retention policy, or is unable to
+# create or update the cron job.
+# 
+
+
+
+# For interested developers, the main functions here, are schedule_snapshots,
+# unschedule_snapshots and take_snapshot : the exit conditions from these
+# functions check the state of the service before returning an appropriate
+# value. The check_failure method is responsible for checking error codes from
+# subprocesses, and when called with a non-zero argument, will degrade the
+# service, and log an appropriate error message.
+
+
+
+
 
 
 . /lib/svc/share/smf_include.sh
@@ -11,7 +36,8 @@
 result=$SMF_EXIT_OK
 
 # this function validates the properties in the FMRI passed to it, then
-# calls a function to create cron job to schedule a snapshot based on them.
+# calls a function to create cron job that schedules a snapshot schedule based
+# on the properties set in the service instance.
 # $1 is assumed to be a valid FMRI
 function schedule_snapshots {
 
@@ -23,25 +49,26 @@ function schedule_snapshots {
 	OFFSET=$(svcprop -p zfs/offset $FMRI)
 	
 	# for now, we're forcing the offset to be 0 seconds.
-	OFFSET=0	
-	echo $(id)
+	OFFSET=0
+
 	# validate the filesystem
 	zfs list $FILESYS 2>&1 1> /dev/null
-	if [ $? -ne 0 ]
-	then
-	   echo "ERROR: ZFS filesystem in instance $FMRI does not exist"
-	   return 1
-        fi
+	check_failure $? "ZFS filesystem does not exist!"
 
 	# remove anything that's there at the moment
 	unschedule_snapshots $FMRI		
 
 	add_cron_job $INTERVAL $PERIOD $OFFSET $FMRI
-	if [ $? -ne 0 ]
+	
+	# finally, check our status before we return
+	STATE=$(svcprop -p restarter/state $FMRI)
+	if [ "${STATE}" == "maintenance" ]
 	then
-	   echo "Unable to add cron job for $FMRI"
+		STATE=1
+	else
+		STATE=0
 	fi	
-	return 0;
+	return $STATE
 }
 
 
@@ -86,8 +113,10 @@ function add_cron_job { # $INTERVAL $PERIOD $OFFSET $FMRI
 	crontab -l | grep -v "/lib/svc/method/zfs-auto-snapshot $FMRI$" > /tmp/saved-crontab.$$
 	echo "${ENTRY} /lib/svc/method/zfs-auto-snapshot $FMRI" >> /tmp/saved-crontab.$$
 	crontab /tmp/saved-crontab.$$
+	check_failure $? "Unable to add cron job!"
+
 	rm /tmp/saved-crontab.$$
-	return $?
+	return 0
 }
 
 
@@ -97,15 +126,23 @@ function add_cron_job { # $INTERVAL $PERIOD $OFFSET $FMRI
 function unschedule_snapshots {
 
 	FMRI=$1
-	# need work in here to remove the cron job
 	crontab -l | grep -v "/lib/svc/method/zfs-auto-snapshot $FMRI$" > /tmp/saved-crontab.$$
 	crontab /tmp/saved-crontab.$$
+	check_failure $? "Unable to unschedule snapshots for $FMRI"
 	rm /tmp/saved-crontab.$$
-	return 0;
+
+	# finally, check our status before we return
+	STATE=$(svcprop -p restarter/state $FMRI)
+	if [ "${STATE}" == "maintenance" ]
+	then
+		STATE=1
+	else
+		STATE=0
+	fi
 }
 
 
-# this function actually takes the snapshot of the filesystem. This is what
+# This function actually takes the snapshot of the filesystem. This is what
 # really does the work. We name snapshots based on a standard time format
 # $1 is assumed to be a valid FMRI
 function take_snapshot {
@@ -118,37 +155,88 @@ function take_snapshot {
 	KEEP=$(svcprop -p zfs/keep $FMRI)
 	SNAP_CHILDREN=$(svcprop -p zfs/snapshot-children $FMRI)
 	
-	if [ "${KEEP}" != "all" ]
-	then
-	   # count snapshots of this FS to see if we need to delete old ones
-	   NUM_SNAPS=$(zfs list -H -t snapshot | grep "$FILESYS@zfs-auto-snap" | wc -l)
-	   if [ "${NUM_SNAPS}" -ge "${KEEP}" ]
-	   then
-		echo "Deleting snapshots for $FILESYS@zfs-auto-snap is not yet supported"
-		# FIXME : destroy oldest snapshot
-		# this is not yet implemented, as I'm waiting for Sarah's
-		# zfs -s, to allow me to sort snapshots by creation date,
-		# and then delete the oldest (tail -1)..
-	   fi
-	fi
-
 	# Ok, now say cheese! It'd be nice if the child snapshotting was
 	# atomic, but we don't yet have that in zfs.
-	if [ "${SNAP_CHILDREN}" = "true" ]
+	if [ "${SNAP_CHILDREN}" == "true" ]
 	then
 	   for child in $(zfs list -r -H -o name -t filesystem $FILESYS)
 	   do
+		destroy_older_snapshots $child $KEEP
 		zfs snapshot $child@$SNAPNAME
+		check_failure $? "Unable to take snapshot $child@$SNAPNAME."
 	   done
         else
+  	   destroy_older_snapshots $FILESYS $KEEP
 	   zfs snapshot $FILESYS@$SNAPNAME
+	   check_failure $? "Unable to take snapshot $FILESYS@$SNAPNAME."
 	fi
+
+	# finally, check our status before we return
+	STATE=$(svcprop -p restarter/state $FMRI)
+	if [ "${STATE}" == "maintenance" ]
+	then
+		STATE=1
+	else
+		STATE=0
+	fi
+	return $STATE
+}
+
+# Given a filesystem name, and a limit of the number of snapshots we want
+# we destroy all older snapshots of this filesystem whose names begin
+# with the text "zfs-auto-snap". Note that here we destroy one more snapshot
+# than the "keep" threshold - this is because in the context of calling this
+# function, we're already creating one new auto-snapshot.
+#
+function destroy_older_snapshots {
+
+	FILESYS=$1
+	KEEP=$2
+	if [ "${KEEP}" == "all" ]
+	then
+		return 0
+	fi
+	
+	KEEP=$(($KEEP - 1))
+	
+	# walk through the snapshots, newest first, destroying older ones
+	for snapshot in $(zfs list -r -t snapshot -H -o name $FILESYS \
+		 | grep $FILESYS@zfs-auto-snap | sort -r)
+	do
+		if [ $KEEP -le 0 ]
+		then
+			echo "$snapshot being destroyed as per retention policy."
+			zfs destroy $snapshot
+			check_failure $? "Unable to destroy $snapshot"
+		else
+			# don't destroy this one			
+			KEEP=$(($KEEP - 1))
+		fi
+	done
+}
+
+# Given the exit status of a command, an integer, 0 if the command completed
+# without errors, if the command exited with errors, then we degrade the
+# state of this service into maintenance mode. We also log an error message
+# as passed into this function.
+#
+function check_failure { # integer exit status, error message to display
+  
+   RESULT=$1
+   ERR_MSG=$2
+   if [ $RESULT -ne 0 ]
+   then
+	echo "Error: $ERR_MSG"
+	echo "Moving service $FMRI to maintenance mode."
+	svcadm mark maintenance $FMRI
+   fi
+
 }
 
 
 # Given a range start, end and width of period, return a comma
 # separated string of numbers within that range and conforming to
-# that period. This isn't ideal, but it'll do
+# that period. This isn't ideal, but it'll do for now.
 #
 function get_divisor { # start period, end period, width of period
 
@@ -187,7 +275,7 @@ case "$1" in
  	then
 		result=$SMF_EXIT_OK
 	else
-		echo "Uhho, something went wrong"
+		echo "Uhho, something went wrong with $SMF_FMRI"
 		result=$SMF_EXIT_ERR_FATAL
 	fi
         ;;
@@ -198,7 +286,7 @@ case "$1" in
  	then
 		result=$SMF_EXIT_OK
 	else
-		echo "Uhho something went wrong"
+		echo "Uhho something went wrong with $SMF_FMRI"
 		result=$SMF_EXIT_ERR_FATAL
 	fi
         ;;
