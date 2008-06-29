@@ -1,6 +1,26 @@
 #!/bin/ksh
 
 #
+# CDDL HEADER START
+#
+# The contents of this file are subject to the terms of the
+# Common Development and Distribution License, Version 1.0 only
+# (the "License").  You may not use this file except in compliance
+# with the License.
+#
+# You can obtain a copy of the license at usr/src/OPENSOLARIS.LICENSE
+# or http://www.opensolaris.org/os/licensing.
+# See the License for the specific language governing permissions
+# and limitations under the License.
+#
+# When distributing Covered Code, include this CDDL HEADER in each
+# file and include the License file at usr/src/OPENSOLARIS.LICENSE.
+# If applicable, add the following below this CDDL HEADER, with the
+# fields enclosed by brackets "[]" replaced with your own identifying
+# information: Portions Copyright [yyyy] [name of copyright owner]
+#
+# CDDL HEADER END
+#
 # Copyright 2006 Sun Microsystems, Inc.  All rights reserved.
 # Use is subject to license terms.
 #
@@ -9,8 +29,40 @@
 # This script implements a simple wizard to schedule the taking of regular
 # snapshots of this file system. Most of the interesting stuff is at the bottom.
 #
+# Since we'd like it to work with two different versions of zenity, we check
+# the version string, and call the appropriate "_26" versions of functions
+# if we need to. (zenity that ships in s10u2 is based on GNOME 2.6 and doesn't
+# have the same functionality as the 2.14-based zenity)
 
 MAIN_TITLE="Take regular ZFS snapshots"
+
+function get_interval_26 {
+  # Get an interval for taking snapshots
+  # zenity 2.6 doesn't support the --text option to --list
+  TITLE="${MAIN_TITLE}: Choose a time period for taking snapshots "
+  INTERVAL=$(zenity --list --title="${TITLE}" \
+  --radiolist --column="select" \
+  --column="interval" x "minutes" x "hours" x "days" x "months")
+  if [ $? -eq 1 ]
+  then
+      exit 1;
+  fi
+  case $INTERVAL in
+   'minutes')
+	MAX_VAL=60
+	;;
+   'hours')
+	MAX_VAL=24
+	;;
+    'days')
+	MAX_VAL=31
+	;;
+    'months')
+	MAX_VAL=12
+	;;
+   esac
+
+}
 
 
 function get_interval {
@@ -41,6 +93,20 @@ function get_interval {
 
 }
 
+function get_period_26 {
+  # work out the period we want between snapshots
+  # zenity 2.6 doesn't support the --scale option, use a text entry instead.
+  TITLE="${MAIN_TITLE}: Interval"
+  TEXT="Enter how often you want to take snapshots (eg. every 10 ${INTERVAL})"
+  PERIOD=$(zenity --entry --title="${TITLE}" --text="${TEXT}" \
+ 	 --entry-text=10)
+  if [ $? -eq 1 ]
+  then
+    exit 1;
+  fi
+
+}
+
 function get_period {
   # work out the period we want between snapshots
   TITLE="${MAIN_TITLE}: Interval"
@@ -50,6 +116,24 @@ function get_period {
   if [ $? -eq 1 ]
   then
     exit 1;
+  fi
+}
+
+
+function get_maxsnap_26 {
+  # choose a number of snapshots to save
+  # zenity 2.6 doesn't support the --scale option, use a text entry instead
+  TITLE="${MAIN_TITLE}: Number to save"
+  TEXT="Choose a maximum number of snapshots to keep, Cancel disables the limit\n\
+  \n\
+   (Note: once you hit this number of snapshots, the oldest will be\n\
+    automatically deleted to make room)"
+  KEEP_SNAP=$(zenity --entry --title="${TITLE}" \
+  --text="${TEXT}" --entry-text="all")
+
+  if [ $? -eq 1 ]
+  then
+   KEEP_SNAP="all"
   fi
 }
 
@@ -85,11 +169,6 @@ function get_snap_children {
 
 function show_summary {
   # let's give the user a summary of what we've done:
-  echo "SMF instance built to take snapshots using variables:"
-  echo "interval=$INTERVAL"
-  echo "period=$PERIOD"
-  echo "keep_num=$KEEP_SNAP"
-  echo "recurse=$SNAP_CHILDREN"
 
   TITLE="${MAIN_TITLE}: Summary"
   TEXT="The following snapshot schedule will be created :\n\n\
@@ -99,6 +178,7 @@ function show_summary {
   Keep snapshots = ${KEEP_SNAP}\n\
   Snapshot Children = ${SNAP_CHILDREN}\n\n\
   Do you want to write this auto-snapshot manifest now ?"
+
   zenity --question --title="${TITLE}" --text="${TEXT}"
   if [ $? -eq 1 ]
   then
@@ -118,20 +198,39 @@ fi
 
 FILESYS=$1
 
-#zfs list $FILESYS 2>&1 1> /dev/null
+zfs list $FILESYS 2>&1 1> /dev/null
 if [ $? -ne 0 ]
 then
   echo "Unable to see filesystem $1. Exiting now."
   exit 1;
 fi
 
-get_interval
-get_period
-get_maxsnap
-get_snap_children
-show_summary
 
-ESCAPED_NAME=$(echo $1 | sed -e 's#/#-#g')
+VERSION=$(zenity --version)
+if [ "$VERSION" == "2.6.0" ]
+then
+ get_interval_26
+ get_period_26
+ get_maxsnap_26
+ get_snap_children
+ show_summary
+
+else
+ # using a more up to date zenity
+ get_interval
+ get_period
+ get_maxsnap
+ get_snap_children
+ show_summary
+fi
+
+# this is what works out the instance name: we can't have . or /
+# characters in instance names, so we escape them appropriately
+# eg. the auto snapshots for the ZFS filesystem tank/tims-fs are
+# taken by the SMF instance
+# svc:/system/filesystem/zfs/auto-snapshot:tank-tims--fs
+ESCAPED_NAME=$(echo $1 | sed -e 's#-#--#g' | sed -e 's#/#-#g' \
+		| sed -e 's#\.#-#g')
 
 # Now we can build an SMF manifest to perform these actions...
 
@@ -142,7 +241,7 @@ cat > auto-snapshot-instance.xml <<EOF
 <service
 	name='system/filesystem/zfs/auto-snapshot'
 	type='service'
-	version='0.3'>
+	version='0.4'>
 	<create_default_instance enabled='false' />
 
 	<instance name='$ESCAPED_NAME' enabled='false' >
@@ -185,7 +284,8 @@ cat > auto-snapshot-instance.xml <<EOF
 </service_bundle>
 EOF
 
-echo "Thanks, now import the SMF manifest, using the command :"
+echo "Thanks, now assuming the default SMF manifest has already been imported,"
+echo "you can now import the manifest for this instance, using the command :"
 echo ""
 echo "  # svccfg import auto-snapshot-instance.xml"
 echo ""
