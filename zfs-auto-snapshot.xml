@@ -32,7 +32,7 @@
 <service
 	name='system/filesystem/zfs/auto-snapshot'
 	type='service'
-	version='0.3'>
+	version='0.6'>
 
 	<!-- no point in being able to take snapshots if we don't have a fs -->
 	<dependency
@@ -59,14 +59,41 @@
 	<!-- the properties we expect that any instance will define
 	  they being :
 
-	 	 fs-name : the name of the filesystem we want to snapshot
-		interval : minutes | hours | days | weeks
-		  period : how many (m,d,h,w) do we wait between snapshots
-	          offset : the offset into the time period we want
-		    keep : how many snapshots we should keep, otherwise, we
+	 	 fs-name : The name of the filesystem we want to snapshot
+
+		interval : minutes | hours | days | months
+
+		  period : How many (m,h,d,m) do we wait between snapshots
+
+	          offset : The offset into the time period we want
+
+		    keep : How many snapshots we should keep, otherwise, we
 			   delete the oldest when we hit this threshold
-       snapshot-children : whether we should recursively snapshot
+
+       snapshot-children : Whether we should recursively snapshot
 			   all filesystems contained within.
+
+		  backup : If we want to perform a "zfs send" for our backup
+			   we set this - either to "full" or "incremental".
+			   If set to "none", we don't perform backups.
+
+         backup-save-cmd : A command string to save the backup - if unset,
+			   we return an error and move the service to
+			   maintenance.
+
+             backup-lock : A string we set when a backup operation is in
+			   progress, to prevent two backups from the same
+			   service instance running into each other. Not
+			   completely flawless, but okay. Due to 6338294,
+			   we use the keyword "unlocked" to indicate that
+			   the lock is not held.	   
+
+                   label : A string that allows us to differentiate this set
+			   of snapshot schedules from others configured for the
+			   same filesystem. This is not usually needed and can
+			   be left unset, but it can be useful in some 
+			   situations (particularly for backups).
+
 
 	 -->
 	<property_group name="zfs" type="application">
@@ -75,6 +102,13 @@
 	  <propval name="offset" type="astring" value="Not set" override="true"/>
 	  <propval name="snapshot-children" type="boolean" value="false" override="true"/>
 	  <propval name="keep" type="astring" value="all" override="true"/>
+
+	  <propval name="backup" type="astring" value="none" override="true"/>
+	  <propval name="backup-save-cmd" type="astring" value="" override="true"/>
+	  <propval name="backup-lock" type="astring" value="unlocked" override="true"/>
+
+	  <propval name="label" type="astring" value="" override="true"/>
+
 	</property_group>
 
 	<!-- we're *not* defining an instance here : the idea is that instances
@@ -101,11 +135,21 @@
         </property_group>
 
 	<property_group name="zfs" type="application">
+
 	  <propval name="fs-name" type="astring" value="tank/timf"/>
 	  <propval name="interval" type="astring" value="days"/>
 	  <propval name="period" type="astring" value="7"/>
 	  <propval name="offset" type="astring" value="0"/>
 	  <propval name="snapshot-children" type="boolean" value="false"/>
+
+	  <propval name="backup" type="astring" value="full" override="true"/>
+	  <propval name="backup-save-cmd" type="astring" override="true"
+			value="ssh haiiro.ireland zfs receive -d tank/data "/>
+	  <propval name="backup-lock" type="astring" value="unlocked" 
+			override="true"/>
+
+	  <propval name="label" type="astring" value="all" override="true"/>
+
 	</property_group>
 
 	</instance>
@@ -122,20 +166,31 @@
 		</common_name>
 		<description>
 			<loctext xml:lang='C'>
-				This service provides system support for taking
-				automatic snapshots of ZFS filesystems.
-				In order to use this service, you must create
-				instances per set of automatic snapshots you
-				want to create.
+This service provides system support for taking automatic snapshots of ZFS
+filesystems.
 
-				The on starting a service instance, a cron job
-				corresponding to the properties set in the
-				instance is created on the host. This cron job
-				will regularly take snapshots of the specified
-				ZFS filesystem.
+In order to use this service, you must create a service instance per set of
+automatic snapshots you want to take.
 
-				On stopping the service, that cron job is
-				removed.
+The on starting a service instance, a cron job corresponding to the properties
+set in the instance is created on the host. This cron job will regularly take
+snapshots of the specified ZFS filesystem.
+
+On stopping the service, that cron job is removed.
+
+We also have the ability to perform backups, done using the "zfs send" command.
+A property set in the service called "backup-save-cmd" can be configured as the
+command used to save the backup stream. See the zfs(1M) man page for an example.
+The backups can be either "full" backups, or "incremental" backups - for each
+incremental backup, a full backup must be configured first. If for some reason
+an incremental backup fails, a full backup is performed instead.
+
+Care should be taken when configuring backups to ensure that the time
+granularity of the cron job is sufficient to allow the backup to complete
+between invocations of each backup. We perform locking to ensure that two
+backups of the same filesystem cannot run simultaneously, but will move the
+service into "maintenance" state should this occur.
+
 			</loctext>
 		</description>
 	</template>

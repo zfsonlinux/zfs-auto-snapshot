@@ -22,14 +22,14 @@
 
  CDDL HEADER END
  -->
-<service_bundle type='manifest' name='space-timf'>
+<service_bundle type='manifest' name='space-timf,mybackup'>
 <service
 	name='system/filesystem/zfs/auto-snapshot'
 	type='service'
-	version='0.4'>
+	version='0.6'>
 	<create_default_instance enabled='false' />
 
-	<instance name='space-timf' enabled='false' >
+	<instance name='space-timf,mybackup' enabled='false' >
 
         <exec_method
 		type='method'
@@ -60,6 +60,19 @@
 		   override="true"/>
 	  <propval name="snapshot-children" type="boolean" value="false"
 		   override="true"/>
+
+	  <propval name="backup" type="astring" value="full"
+		   override="true"/>
+	  <propval name="backup-save-cmd" type="astring" 
+		   value="/usr/bin/ssh timf@usuki /usr/bin/pfexec /usr/sbin/zfs receive -d tank/backup"
+		   override="true"/>
+	  <propval name="backup-lock" type="astring" value="unlocked"
+		   override="true"/>
+
+	  <propval name="label" type="astring" value="mybackup"
+		   override="true"/>
+
+
 	</property_group>
 
 	</instance>

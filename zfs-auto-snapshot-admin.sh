@@ -33,13 +33,14 @@
 # the version string, and call the appropriate "_26" versions of functions
 # if we need to. (zenity that ships in s10u2 is based on GNOME 2.6 and doesn't
 # have the same functionality as the 2.14-based zenity)
+#
 
 MAIN_TITLE="Take regular ZFS snapshots"
 
 function get_interval_26 {
   # Get an interval for taking snapshots
   # zenity 2.6 doesn't support the --text option to --list
-  TITLE="${MAIN_TITLE}: Choose a time period for taking snapshots "
+  TITLE="${MAIN_TITLE}: Choose a time period for taking snapshots."
   INTERVAL=$(zenity --list --title="${TITLE}" \
   --radiolist --column="select" \
   --column="interval" x "minutes" x "hours" x "days" x "months")
@@ -167,6 +168,63 @@ function get_snap_children {
   fi
 }
 
+
+function get_backup {
+  # decide if we want to do backup of this filesystem
+  TITLE="${MAIN_TITLE}: Remote backups"
+  TEXT="Choose a type of backup to perform for this filesystem:"
+
+  BACKUP=$(zenity --list --title="${TITLE}" --text="${TEXT}" \
+  --radiolist --column="select" \
+  --column="type" x "full" x "incremental" x "none")
+
+  if [ $? -eq 1 ]
+  then
+      exit 1;
+  fi
+
+  case $BACKUP in
+   'incremental' | 'full')
+	get_backup_command
+	;;
+   *)
+        BACKUP="none"
+	;;
+  esac
+
+}
+
+function get_backup_command {
+  # ask the user which backup command they want to use.
+  TITLE="${MAIN_TITLE}: Backup command"
+  TEXT="Enter a command you wish to run on the backup stream.\
+ eg. eval cat > /net/hostname/backup.\$\$"
+
+  BACKUP_COMMAND=$(zenity --entry --title="${TITLE}" --text="${TEXT}" \
+ 	--entry-text="ssh timf@hostname \
+/usr/bin/pfexec /usr/sbin/zfs receive tank/backup")
+  if [ $? -eq 1 ]
+  then
+    exit 1;
+  fi
+
+}
+
+
+function get_label {
+  # ask the user if they want to attach a label to this instance
+  TITLE="${MAIN_TITLE}: Label"
+  TEXT="Choose a label you may use to distinguish this snapshot schedule\
+ from others (Alphanumeric chars only. Cancel to leave blank.)"
+
+  LABEL=$(zenity --entry --title="${TITLE}" --text="${TEXT}" \
+ 	 --entry-text="")
+  if [ $? -eq 1 ]
+  then
+    LABEL=""
+  fi
+}
+
 function show_summary {
   # let's give the user a summary of what we've done:
 
@@ -176,7 +234,11 @@ function show_summary {
   Interval = ${INTERVAL}\n\
   Period = ${PERIOD}\n\
   Keep snapshots = ${KEEP_SNAP}\n\
-  Snapshot Children = ${SNAP_CHILDREN}\n\n\
+  Snapshot Children = ${SNAP_CHILDREN}\n\
+  Backup = ${BACKUP}\n\
+  Backup command = ${BACKUP_COMMAND}\n\
+  Label = ${LABEL}\n\
+  \n\
   Do you want to write this auto-snapshot manifest now ?"
 
   zenity --question --title="${TITLE}" --text="${TEXT}"
@@ -213,6 +275,8 @@ then
  get_period_26
  get_maxsnap_26
  get_snap_children
+ get_backup
+ get_label
  show_summary
 
 else
@@ -221,6 +285,8 @@ else
  get_period
  get_maxsnap
  get_snap_children
+ get_backup
+ get_label
  show_summary
 fi
 
@@ -231,7 +297,10 @@ fi
 # svc:/system/filesystem/zfs/auto-snapshot:tank-tims--fs
 ESCAPED_NAME=$(echo $1 | sed -e 's#-#--#g' | sed -e 's#/#-#g' \
 		| sed -e 's#\.#-#g')
-
+if [ ! -z "${LABEL}" ]
+then
+  ESCAPED_NAME="${ESCAPED_NAME},${LABEL}"
+fi
 # Now we can build an SMF manifest to perform these actions...
 
 cat > auto-snapshot-instance.xml <<EOF
@@ -241,10 +310,10 @@ cat > auto-snapshot-instance.xml <<EOF
 <service
 	name='system/filesystem/zfs/auto-snapshot'
 	type='service'
-	version='0.4'>
+	version='0.6'>
 	<create_default_instance enabled='false' />
 
-	<instance name='$ESCAPED_NAME' enabled='false' >
+	<instance name='${ESCAPED_NAME}' enabled='false' >
 
         <exec_method
 		type='method'
@@ -262,7 +331,9 @@ cat > auto-snapshot-instance.xml <<EOF
         	<propval name='duration' type='astring' value='transient' />
         </property_group>
 
+        <!-- properties for zfs automatic snapshots -->
 	<property_group name="zfs" type="application">
+
 	  <propval name="fs-name" type="astring" value="$FILESYS" 
 		   override="true"/>
 	  <propval name="interval" type="astring" value="$INTERVAL"
@@ -275,6 +346,17 @@ cat > auto-snapshot-instance.xml <<EOF
 		   override="true"/>
 	  <propval name="snapshot-children" type="boolean" value="$SNAP_CHILDREN"
 		   override="true"/>
+
+	  <propval name="backup" type="astring" value="$BACKUP"
+		   override="true"/>
+	  <propval name="backup-save-cmd" type="astring" value="$BACKUP_COMMAND"
+		   override="true"/>
+	  <propval name="backup-lock" type="astring" value="unlocked"
+		   override="true"/>
+
+	  <propval name="label" type="astring" value="${LABEL}"
+		   override="true"/>
+
 	</property_group>
 
 	</instance>
@@ -290,6 +372,7 @@ echo ""
 echo "  # svccfg import auto-snapshot-instance.xml"
 echo ""
 echo "then issue the command :"
-echo "  # svcadm enable svc:/system/filesystem/zfs/auto-snapshot:$ESCAPED_NAME"
+echo "  # svcadm enable \
+svc:/system/filesystem/zfs/auto-snapshot:$ESCAPED_NAME"
 echo ""
 echo "You can see what work will be done by checking your crontab."
