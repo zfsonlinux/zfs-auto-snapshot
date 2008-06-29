@@ -1,17 +1,13 @@
 <?xml version="1.0"?>
 <!DOCTYPE service_bundle SYSTEM "/usr/share/lib/xml/dtd/service_bundle.dtd.1">
-<service_bundle type='manifest' name='space-timf,frequent'>
-
-<!-- A service instance that takes snapshots every 10 minutes, keeping 60 snapshots
-  into the past. All child filesystems of space/timf are also snapshotted. -->
-
+<service_bundle type='manifest' name='tank-timf-torrent,foo'>
 <service
 	name='system/filesystem/zfs/auto-snapshot'
 	type='service'
-	version='0.7'>
+	version='0.10'>
 	<create_default_instance enabled='false' />
 
-	<instance name='space-timf,frequent' enabled='false' >
+	<instance name='tank-timf-torrent,foo' enabled='false' >
 
         <exec_method
 		type='method'
@@ -32,27 +28,30 @@
         <!-- properties for zfs automatic snapshots -->
 	<property_group name="zfs" type="application">
 
-	  <propval name="fs-name" type="astring" value="space/timf" 
+	  <propval name="fs-name" type="astring" value="tank/timf/torrent" 
 		   override="true"/>
-	  <propval name="interval" type="astring" value="minutes"
+	  <propval name="interval" type="astring" value="hours"
 		   override="true"/>
-	  <propval name="period" type="astring" value="10"
+	  <propval name="period" type="astring" value="14"
 		   override="true"/>
 	  <propval name="offset" type="astring" value="0"
 		   override="true"/>
-	  <propval name="keep" type="astring" value="60"
+	  <propval name="keep" type="astring" value="16"
 		   override="true"/>
-	  <propval name="snapshot-children" type="boolean" value="true"
+	  <propval name="snapshot-children" type="boolean" value="false"
 		   override="true"/>
 
-	  <propval name="backup" type="astring" value="none"
+	  <propval name="backup" type="astring" value="incremental"
 		   override="true"/>
-	  <propval name="backup-save-cmd" type="astring" value=""
+	  <propval name="backup-save-cmd" type="astring" value="ssh timf@hostname /usr/bin/pfexec /usr/sbin/zfs receive tank/backup"
 		   override="true"/>
 	  <propval name="backup-lock" type="astring" value="unlocked"
 		   override="true"/>
 
-	  <propval name="label" type="astring" value="frequent"
+	  <propval name="label" type="astring" value="foo"
+		   override="true"/>
+
+	  <propval name="verbose" type="boolean" value="false"
 		   override="true"/>
 
 	</property_group>

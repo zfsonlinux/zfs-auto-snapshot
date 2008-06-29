@@ -1,25 +1,32 @@
 <?xml version="1.0"?>
 <!DOCTYPE service_bundle SYSTEM "/usr/share/lib/xml/dtd/service_bundle.dtd.1">
-<service_bundle type='manifest' name='space-timf,10mins'>
+<service_bundle type='manifest' name='frequent'>
 <service
 	name='system/filesystem/zfs/auto-snapshot'
 	type='service'
-	version='0.7'>
+	version='0.10'>
+
+	<!-- This is one of the default instances that comes with the	
+	ZFS Automatic Snapshot SMF Service. It snapshots all filesystems marked
+	with the ZFS User Property com.sun:auto-snapshot:frequent=true every
+	15 minutes, and keeps 4 of these snapshots into the past.
+	-->
+
 	<create_default_instance enabled='false' />
 
-	<instance name='space-timf,10mins' enabled='false' >
+	<instance name='frequent' enabled='false' >
 
         <exec_method
 		type='method'
 		name='start'
 		exec='/lib/svc/method/zfs-auto-snapshot start'
-		timeout_seconds='10' />
+		timeout_seconds='0' />
 
 	<exec_method
 		type='method'
 		name='stop'
 		exec='/lib/svc/method/zfs-auto-snapshot stop'
-		timeout_seconds='10' />
+		timeout_seconds='0' />
 
         <property_group name='startd' type='framework'>
         	<propval name='duration' type='astring' value='transient' />
@@ -28,27 +35,30 @@
         <!-- properties for zfs automatic snapshots -->
 	<property_group name="zfs" type="application">
 
-	  <propval name="fs-name" type="astring" value="space/timf" 
+	  <propval name="fs-name" type="astring" value="//" 
 		   override="true"/>
 	  <propval name="interval" type="astring" value="minutes"
 		   override="true"/>
-	  <propval name="period" type="astring" value="10"
+	  <propval name="period" type="astring" value="15"
 		   override="true"/>
 	  <propval name="offset" type="astring" value="0"
 		   override="true"/>
-	  <propval name="keep" type="astring" value="12"
+	  <propval name="keep" type="astring" value="4"
 		   override="true"/>
-	  <propval name="snapshot-children" type="boolean" value="true"
+	  <propval name="snapshot-children" type="boolean" value="false"
 		   override="true"/>
 
 	  <propval name="backup" type="astring" value="none"
 		   override="true"/>
-	  <propval name="backup-save-cmd" type="astring" value=""
+	  <propval name="backup-save-cmd" type="astring" value="not set"
 		   override="true"/>
 	  <propval name="backup-lock" type="astring" value="unlocked"
 		   override="true"/>
 
-	  <propval name="label" type="astring" value="10mins"
+	  <propval name="label" type="astring" value="frequent"
+		   override="true"/>
+
+	  <propval name="verbose" type="boolean" value="false"
 		   override="true"/>
 
 	</property_group>

@@ -21,13 +21,21 @@
 #
 # CDDL HEADER END
 #
-# Copyright 2006 Sun Microsystems, Inc.  All rights reserved.
+# Copyright 2008 Sun Microsystems, Inc.  All rights reserved.
 # Use is subject to license terms.
 #
 
 #
-# This script implements a simple wizard to schedule the taking of regular
-# snapshots of this file system. Most of the interesting stuff is at the bottom.
+# There are two modes to this script - "simple" mode, which takes no options
+# and lets a user select which filesystems should have automatic snapshots taken
+# using one of the built-in default schedules, or "advanced" mode, which takes
+# a filesystem as an argument, and constructs an SMF manifest for the user, but
+# nothing else. (it's up to the user to import the manifest and start the
+# service) We don't currently let the user set the "zfs/avoidscrub" option - and
+# set it to "true" by default.
+#
+
+
 #
 # Since we'd like it to work with two different versions of zenity, we check
 # the version string, and call the appropriate "_26" versions of functions
@@ -84,10 +92,10 @@ function get_interval {
    'hours')
 	MAX_VAL=24
 	;;
-    'days')
+   'days')
 	MAX_VAL=31
 	;;
-    'months')
+   'months')
 	MAX_VAL=12
 	;;
    esac
@@ -250,13 +258,108 @@ function show_summary {
 }
 
 
+#
+# This function implements the simple mode  - rather than the advanced
+# mode (which builds a manifest for automatic snapshots based on user input)
+# This version is much simpler, and lets a user simply select the filesystems 
+# they wish to have snapshots taken of, using the default monthly, daily, 
+# and frequent snapshot schedules which have been preconfigured.
+#
+function run_gui {
+
+	# ask the user to choose between configuring monthly, daily, hourly
+	# or frequent snapshots. This is not internationalised, sorry.
+
+	TITLE="${MAIN_TITLE}"
+	TEXT="Choose a snapshot schedule to configure: 
+	(run program again to configure additional schedules)"
+	LABEL=$(zenity --list --title="${TITLE}" --text="${TEXT}" \
+		--radiolist --column="select" \
+		--column="Snapshot type" x "frequent" x "hourly" x "daily" x \
+			 "weekly" x "monthly")
+
+	if [ $? -eq 1 ]
+	then
+		exit 1;
+	fi
+
+
+	FILESYSTEMS=/tmp/zfs-auto-snapshot-admin.$$
+	# record the current snapshot property state from all filesystems
+	# changing strings to either TRUE|FALSE, which conveniently are also
+	# the arguments that "zenity --list" uses to mark boxes as checked or not
+	# on entry.
+	zfs list -H -o com.sun:auto-snapshot:$LABEL,name -t filesystem | \
+		  sed -e 's/^true/TRUE/g' \
+		      -e 's/^false/FALSE/g' -e 's/^-/FALSE/g' > $FILESYSTEMS
+
+
+	# obtain input from the user - output is a space separated list of
+	# filesystems that have the checkbox selected.
+	ZENITY_SELECTIONS=$(
+	zenity --list --checklist --column="Enabled" --column="Filesystem" \
+	--title="$TITLE" \
+	--text="Select the filesystems for $LABEL automatic snapshots" \
+	--separator=' ' \
+	$(cat $FILESYSTEMS)
+	)
+
+	if [ $? -ne 0 ]
+	then
+		exit 1
+	fi	
+
+	# append a space to properly delimit the last item in the list
+	export ZENITY_SELECTIONS="${ZENITY_SELECTIONS} "
+
+	# Walk all filesystems, checking whether the user has selected each one
+	# from the zenity dialog, then check to see whether the auto-snapshot
+	# zfs property was already set, changing it when necessary.
+	for fs in $(cat $FILESYSTEMS | awk '{print $2}')
+	do
+		if echo "$ZENITY_SELECTIONS" | grep "$fs " > /dev/null
+		then
+			# check to see if it's currently set to false
+			if cat $FILESYSTEMS | grep "^FALSE[	 ]*$fs$" > /dev/null
+			then
+				# echo setting $fs to on
+				zfs set com.sun:auto-snapshot:$LABEL=true $fs
+			fi
+	
+		else
+			# check to see if it's currently set to true
+			if cat $FILESYSTEMS | grep "^TRUE[	 ]*$fs$" > /dev/null
+			then
+				# echo setting $fs to off
+				zfs set com.sun:auto-snapshot:$LABEL=false $fs
+			fi
+		fi
+	done
+	rm $FILESYSTEMS
+}
+
 ## Functions out of the way, we can start the wizard properly
 
 if [ "$#" != 1 ]
 then
-  echo "Usage: zfs-auto-snapshot-admin.sh [zfs filesystem name]"
+  echo "Usage: zfs-auto-snapshot-admin.sh [ simple ] | [zfs filesystem name]"
   exit 1;
 fi
+
+if [ $1 == "simple" ]
+then
+	# run ourselves as root
+	if [ -z $GKSU ]
+	then
+		export GKSU=true
+		gksu $0 simple
+		exit $?
+	fi
+
+	run_gui
+	exit 0;
+fi
+
 
 FILESYS=$1
 
@@ -310,7 +413,7 @@ cat > auto-snapshot-instance.xml <<EOF
 <service
 	name='system/filesystem/zfs/auto-snapshot'
 	type='service'
-	version='0.7'>
+	version='0.10'>
 	<create_default_instance enabled='false' />
 
 	<instance name='${ESCAPED_NAME}' enabled='false' >
@@ -355,6 +458,12 @@ cat > auto-snapshot-instance.xml <<EOF
 		   override="true"/>
 
 	  <propval name="label" type="astring" value="${LABEL}"
+		   override="true"/>
+
+	  <propval name="verbose" type="boolean" value="false"
+		   override="true"/>
+
+	  <propval name="avoidscrub" type="boolean" value="true"
 		   override="true"/>
 
 	</property_group>

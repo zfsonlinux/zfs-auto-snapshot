@@ -1,22 +1,24 @@
 
 NAME 
 
-ZFS Automatic Snapshot SMF Service, version 0.7
+ZFS Automatic Snapshot SMF Service, version 0.10
 
 
 
 DESCRIPTION 
 
-This is a *prototype* of a simple SMF service which you can configure to 
-take automatic, scheduled snapshots of any given ZFS filesystem as well
-as perform simple incremental or full backups of that filesystem.
+This is a simple SMF service which you can configure to take automatic,
+scheduled snapshots of any given ZFS filesystem as well as perform simple
+incremental or full backups of that filesystem.
 
-To use the service, the user must install the method script, import the default
-instance, and then create instances for each ZFS filesystem that should be
-managed by the service.
-
-Documentation for the service instance is contained in the manifest file,
+Documentation for the service is contained in the manifest file,
 zfs-auto-snapshot.xml.
+
+As of version 0.9 there is a simple GUI that allows the user to configure
+which filesystems are to be included in the default canned SMF instances.
+This GUI is installed in the GNOME menu under:
+
+	Administration -> Automatic Snapshots
 
 We also bundle a simple GUI application, which will query the user for the
 properties required, and will proceed to build an instance manifest. This
@@ -26,15 +28,42 @@ GUI is documented as part of the installation instructions below.
 
 INSTALLATION
 
-To install, as root, run the following commands:
+To install, as root, pkgadd TIMFauto-snapshot. This package now contains
+several canned SMF instances which are enabled by default. These are:
 
-# cp zfs-auto-snapshot/lib/svc/method/zfs-auto-snapshot /lib/svc/method
-# svccfg import zfs-auto-snapshot/zfs-auto-snapshot.xml
+online          1:17:43 svc:/system/filesystem/zfs/auto-snapshot:hourly
+online          1:17:46 svc:/system/filesystem/zfs/auto-snapshot:monthly
+online          1:17:46 svc:/system/filesystem/zfs/auto-snapshot:daily
+online          1:17:48 svc:/system/filesystem/zfs/auto-snapshot:frequent
+online          1:17:49 svc:/system/filesystem/zfs/auto-snapshot:weekly
 
-Once you have installed these, you need to create an instance of the service
-for each set of ZFS snapshots you want to take. The properties we need are:
+These instances use the special "//" fs-name to determine which filesystems
+should be included in each snapshot schedule. See the description for "fs-name"
+below.
 
- zfs/fs-name		The name of the filesystem
+The included instances have the following properties:
+
+frequent	snapshots every 15 mins, keeping 4 snapshots
+hourly		snapshots every hour, keeping 24 snapshots
+daily		snapshots every day, keeping 31 snapshots
+weekly		snapshots every week, keeping 7 snapshots
+monthly		snapshots every month, keeping 12 snapshots
+
+The default service instance does not need to be enabled.
+
+Additional instances of the service can also be created, for example to group
+related sets of filesystems under a single service instance.
+
+The properties each instance needs are:
+
+ zfs/fs-name		The name of the filesystem. If the special filesystem
+			name "//" is used, then the system snapshots all
+			filesystems with the zfs user property 
+			"com.sun:auto-snapshot:<label>" set to true, so to take
+			frequent snapshots of tank/timf, run the following zfs
+			command:
+
+			# zfs set com.sun:auto-snapshot:frequent=true tank/timf
 
  zfs/interval		[ hours | days | months ]	
 
@@ -56,6 +85,16 @@ for each set of ZFS snapshots you want to take. The properties we need are:
 
  zfs/label		A label that can be used to differentiate this set of
 			backups from others, not required.
+
+ zfs/verbose		Set to false by default, setting to true makes the
+			service produce more output about what it's doing.
+
+ zfs/avoidscrub		Set to true by default, this determines whether
+			we should avoid taking snapshots on any pools that have
+			a scrub or resilver in progress.
+			More info in the bugid:
+			6343667 need itinerary so interrupted scrub/resilver
+				doesn't have to start over
 
 
 An example instance manifest is included in this archive.
@@ -102,5 +141,8 @@ http://blogs.sun.com/timf/entry/and_also_for_s10u2_zfs
 http://blogs.sun.com/timf/entry/smf_philosophy_more_on_zfs
 http://blogs.sun.com/timf/entry/zfs_automatic_snapshots_now_with
 http://blogs.sun.com/timf/entry/zfs_automatic_snapshot_service_logging
+http://blogs.sun.com/timf/entry/zfs_automatic_snapshots_0_8
+http://blogs.sun.com/timf/entry/zfs_automatic_for_the_people
+http://blogs.sun.com/timf/entry/zfs_automatic_snapshots_0_10
 
 The ZFS Automatic Snapshot SMF Service is released under the terms of the CDDL.
