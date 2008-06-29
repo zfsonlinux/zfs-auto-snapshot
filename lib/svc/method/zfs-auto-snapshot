@@ -292,7 +292,7 @@ function destroy_older_snapshots {
 	do
 		if [ $COUNTER -le 0 ]
 		then
-			echo "$snapshot being destroyed as per retention policy."
+			print_log "$snapshot being destroyed as per retention policy."
 			zfs destroy $snapshot
 			check_failure $? "Unable to destroy $snapshot"
 		else
@@ -309,16 +309,26 @@ function destroy_older_snapshots {
 #
 function check_failure { # integer exit status, error message to display
   
-   typeset RESULT=$1
-   typeset ERR_MSG=$2
+	typeset RESULT=$1
+	typeset ERR_MSG=$2
 
-   if [ $RESULT -ne 0 ]
-   then
-	echo "Error: $ERR_MSG"
-	echo "Moving service $FMRI to maintenance mode."
-	svcadm mark maintenance $FMRI
-   fi
+	if [ $RESULT -ne 0 ]
+	then
+		print_log "Error: $ERR_MSG"
+		print_log "Moving service $FMRI to maintenance mode."
+		svcadm mark maintenance $FMRI
+	fi
 
+}
+
+
+# A function we use to emit output. Right now, this goes to syslog via logger(1)
+# but it would be much nicer to be able to print it to the svc log file for
+# each individual service instance - tricky because we're being called from
+# cron, most of the time and are detached from smf.
+function print_log { # message to display
+
+	logger -t zfs-auto-snap -p daemon.notice $*
 }
 
 
@@ -363,16 +373,18 @@ function take_backup { # filesystem backup-type label fmri
     then
 	# Unable to perform this backup due to an existing backup being
 	# executed for this dataset. This would result in moving the
-	# service to maintenance mode if we're doing incrementals, but
-	# it's not so serious for full backups.
-        echo "Unable to backup $FILESYS: $LOCK."
+	# service to maintenance mode if we're doing incrementals, since
+	# missing an incremental backup will result in the user being unable
+	# to restore future incremental backups. This isn't so serious for
+	# full backups.
+        print_log "Unable to backup $FILESYS: $LOCK."
 
 	if [ "$BACKUP" == "incremental" ]
 	then
-	     echo "A lock prevented us from performing an incremental backup."
+	     print_log "A lock prevented us from performing an incremental backup."
 	     return 1
 	else
-	     echo "Full backup not completed for $FMRI on $(date)."
+	     print_log "Full backup not completed for $FMRI."
 	     return 0
 	fi
     else
@@ -413,7 +425,7 @@ function take_backup { # filesystem backup-type label fmri
 
 		if [ "$PREV_SNAP" == "$LAST_SNAP" ]
 		then
-		    echo "Previous snap not found of $dataset, taking full backup"
+		    print_log "Previous snap not found of $dataset, taking full backup."
 		    BACKUP="full"
 		fi
 	;;
@@ -471,7 +483,7 @@ case "$1" in
  	then
 		result=$SMF_EXIT_OK
 	else
-		echo "Uhho, something went wrong with $SMF_FMRI"
+		print_log "Problem taking snapshots for $SMF_FMRI"
 		result=$SMF_EXIT_ERR_FATAL
 	fi
         ;;
@@ -482,7 +494,7 @@ case "$1" in
  	then
 		result=$SMF_EXIT_OK
 	else
-		echo "Uhho something went wrong with $SMF_FMRI"
+		print_log "Problem taking snapshots for $SMF_FMRI"
 		result=$SMF_EXIT_ERR_FATAL
 	fi
         ;;
@@ -493,23 +505,24 @@ case "$1" in
 	SMF_FMRI=$1
 	# are we being called with the correct argument (an FMRI) ?
 
-	echo $SMF_FMRI | grep "^svc:/"
-	if [ $? -eq 0 ]
-	then
-	   take_snapshot $SMF_FMRI
-	   if [ $? -eq 0 ]
-	   then
-  		result=$SMF_EXIT_OK
-   	   else
-		result=$SMF_EXIT_ERR_FATAL
-	   fi
-
-	else
-
-	   echo "Usage from SMF : zfs-auto-snapshot [start | stop]"
-	   echo "Usage from cron: zfs-auto-snapshot svc:/system/filesystem/zfs/auto-snapshot:instance"
-
-       fi
+	case $SMF_FMRI in
+		svc:/*)
+			take_snapshot $SMF_FMRI
+			if [ $? -eq 0 ]
+			then
+				result=$SMF_EXIT_OK
+			else
+				result=$SMF_EXIT_ERR_FATAL
+			fi
+			;;
+		*)
+			# not logging these messages - we're assuming a curious
+			# user has run the script from the command line.
+			echo "Usage from SMF : zfs-auto-snapshot [start | stop]"
+			echo "Usage from cron: zfs-auto-snapshot svc:/system/filesystem/zfs/auto-snapshot:instance"
+			result=$SMF_EXIT_ERR_FATAL
+			;;
+		esac			
 	;;
 
 esac

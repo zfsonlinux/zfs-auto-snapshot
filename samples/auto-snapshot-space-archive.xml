@@ -1,13 +1,16 @@
 <?xml version="1.0"?>
 <!DOCTYPE service_bundle SYSTEM "/usr/share/lib/xml/dtd/service_bundle.dtd.1">
-<service_bundle type='manifest' name='space-timf,10mins'>
+<service_bundle type='manifest' name='space-archive'>
+
+<!-- a simple instance that snapshots the space/archive filesystem every 6 hours -->
+
 <service
 	name='system/filesystem/zfs/auto-snapshot'
 	type='service'
 	version='0.7'>
 	<create_default_instance enabled='false' />
 
-	<instance name='space-timf,10mins' enabled='false' >
+	<instance name='space-archive' enabled='false' >
 
         <exec_method
 		type='method'
@@ -28,17 +31,17 @@
         <!-- properties for zfs automatic snapshots -->
 	<property_group name="zfs" type="application">
 
-	  <propval name="fs-name" type="astring" value="space/timf" 
+	  <propval name="fs-name" type="astring" value="space/archive" 
 		   override="true"/>
-	  <propval name="interval" type="astring" value="minutes"
+	  <propval name="interval" type="astring" value="hours"
 		   override="true"/>
-	  <propval name="period" type="astring" value="10"
+	  <propval name="period" type="astring" value="6"
 		   override="true"/>
 	  <propval name="offset" type="astring" value="0"
 		   override="true"/>
-	  <propval name="keep" type="astring" value="12"
+	  <propval name="keep" type="astring" value="2"
 		   override="true"/>
-	  <propval name="snapshot-children" type="boolean" value="true"
+	  <propval name="snapshot-children" type="boolean" value="false"
 		   override="true"/>
 
 	  <propval name="backup" type="astring" value="none"
@@ -48,7 +51,7 @@
 	  <propval name="backup-lock" type="astring" value="unlocked"
 		   override="true"/>
 
-	  <propval name="label" type="astring" value="10mins"
+	  <propval name="label" type="astring" value=""
 		   override="true"/>
 
 	</property_group>

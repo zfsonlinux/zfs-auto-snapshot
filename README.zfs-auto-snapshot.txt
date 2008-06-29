@@ -1,7 +1,7 @@
 
 NAME 
 
-ZFS Automatic Snapshot SMF Service, version 0.6
+ZFS Automatic Snapshot SMF Service, version 0.7
 
 
 
@@ -84,7 +84,10 @@ you can now import the manifest for this instance, using the command :
 then issue the command :
   # svcadm enable svc:/system/filesystem/zfs/auto-snapshot:tank-root_filesystem
 
-You can see what work will be done by checking your crontab.
+You can see what work will be done by checking your crontab. As of version
+0.7, all logging from the service is done from the method script using
+the print_log function, which uses logger(1) to send message to syslogd(1M)
+at priority level "daemon.notice".
 
 
 SEE ALSO
@@ -98,5 +101,6 @@ http://blogs.sun.com/timf/entry/zfs_automatic_snapshots_smf_service
 http://blogs.sun.com/timf/entry/and_also_for_s10u2_zfs
 http://blogs.sun.com/timf/entry/smf_philosophy_more_on_zfs
 http://blogs.sun.com/timf/entry/zfs_automatic_snapshots_now_with
+http://blogs.sun.com/timf/entry/zfs_automatic_snapshot_service_logging
 
 The ZFS Automatic Snapshot SMF Service is released under the terms of the CDDL.
