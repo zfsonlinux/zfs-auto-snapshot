@@ -1,0 +1,124 @@
+<?xml version="1.0"?>
+<!DOCTYPE service_bundle SYSTEM "/usr/share/lib/xml/dtd/service_bundle.dtd.1">
+<!--
+
+ Copyright 2006 Sun Microsystems, Inc.  All rights reserved.
+ Use is subject to license terms.
+
+-->
+
+<service_bundle type='manifest' name='TIMFzfssnap:filesystem-zfs-auto-snapshot'>
+
+<service
+	name='system/filesystem/zfs/auto-snapshot'
+	type='service'
+	version='1'>
+
+	<!-- no point in being able to take snapshots if we don't have a fs -->
+	<dependency
+		name='fs-local'
+		grouping='require_all'
+		restart_on='none'
+		type='service'>
+		<service_fmri value='svc:/system/filesystem/local' />
+	</dependency>
+	
+	<!-- we also need cron -->
+	<dependency
+		name="cron"
+		grouping="require_all"
+		restart_on="none"
+		type="service">
+		<service_fmri value="svc:/system/cron" />
+	</dependency>
+
+	<property_group name='startd' type='framework'>
+		<propval name='duration' type='astring' value='transient' />
+	</property_group>
+
+	<!-- the properties we expect that any instance will define
+	  they being :
+
+	 	 fs-name : the name of the filesystem we want to snapshot
+		interval : minutes | hours | days | weeks
+		  period : how many (m,d,h,w) do we wait between snapshots
+	          offset : the offset into the time period we want
+		    keep : how many snapshots we should keep, otherwise, we
+			   delete the oldest when we hit this threshold
+       snapshot-children : whether we should recursively snapshot
+			   all filesystems contained within.
+
+	 -->
+	<property_group name="zfs" type="application">
+	  <propval name="fs-name" type="astring" value="Not set" override="true"/>
+	  <propval name="interval" type="astring" value="Not set" override="true"/>
+	  <propval name="offset" type="astring" value="Not set" override="true"/>
+	  <propval name="snapshot-children" type="boolean" value="false" override="true"/>
+	  <propval name="keep" type="astring" value="all" override="true"/>
+	</property_group>
+
+	<!-- we're *not* defining an instance here : the idea is that instances
+	  of this service will be created, one per set of auto-snapshots we want
+	  to take. For reference purposes, here's what such an instance should
+	  look like :
+
+	<instance name='tank-timf' enabled='false' >
+
+        <exec_method
+		type='method'
+		name='start'
+		exec='/home/timf/zfs-auto-snapshot %m'
+		timeout_seconds='10' />
+
+	<exec_method
+		type='method'
+		name='stop'
+		exec='/home/timf/zfs-auto-snapshot %m'
+		timeout_seconds='10' />
+
+        <property_group name='startd' type='framework'>
+        	<propval name='duration' type='astring' value='transient' />
+        </property_group>
+
+	<property_group name="zfs" type="application">
+	  <propval name="fs-name" type="astring" value="tank/timf"/>
+	  <propval name="interval" type="astring" value="days"/>
+	  <propval name="period" type="astring" value="7"/>
+	  <propval name="offset" type="astring" value="0"/>
+	  <propval name="snapshot-children" type="boolean" value="false"/>
+	</property_group>
+
+	</instance>
+
+	-->
+
+	<stability value='Unstable' />
+
+	<template>
+		<common_name>
+			<loctext xml:lang='C'>
+				ZFS automatic snapshots
+			</loctext>
+		</common_name>
+		<description>
+			<loctext xml:lang='C'>
+				This service provides system support for taking
+				automatic snapshots of ZFS filesystems.
+				In order to use this service, you must create
+				instances per set of automatic snapshots you
+				want to create.
+
+				The on starting a service instance, a cron job
+				corresponding to the properties set in the
+				instance is created on the host. This cron job
+				will regularly take snapshots of the specified
+				ZFS filesystem.
+
+				On stopping the service, that cron job is
+				removed.
+			</loctext>
+		</description>
+	</template>
+</service>
+
+</service_bundle>

@@ -1,0 +1,233 @@
+#!/usr/bin/ksh
+
+#
+# Copyright 2004 Sun Microsystems, Inc.  All rights reserved.
+# Use is subject to license terms.
+#
+
+
+. /lib/svc/share/smf_include.sh
+
+result=$SMF_EXIT_OK
+
+# this function validates the properties in the FMRI passed to it, then
+# calls a function to create cron job to schedule a snapshot based on them.
+# $1 is assumed to be a valid FMRI
+function schedule_snapshots {
+
+	FMRI=$1
+	# FIXME need work in here to actually validate the FMRI props
+	FILESYS=$(svcprop -p zfs/fs-name $FMRI)
+	INTERVAL=$(svcprop -p zfs/interval $FMRI)
+	PERIOD=$(svcprop -p zfs/period $FMRI)
+	OFFSET=$(svcprop -p zfs/offset $FMRI)
+	
+	# for now, we're forcing the offset to be 0 seconds.
+	OFFSET=0	
+	echo $(id)
+	# validate the filesystem
+	zfs list $FILESYS 2>&1 1> /dev/null
+	if [ $? -ne 0 ]
+	then
+	   echo "ERROR: ZFS filesystem in instance $FMRI does not exist"
+	   return 1
+        fi
+
+	# remove anything that's there at the moment
+	unschedule_snapshots $FMRI		
+
+	add_cron_job $INTERVAL $PERIOD $OFFSET $FMRI
+	if [ $? -ne 0 ]
+	then
+	   echo "Unable to add cron job for $FMRI"
+	fi	
+	return 0;
+}
+
+
+#
+# Adding a cron job that runs exactly every x time-intervals is hard to do
+# properly.
+#
+# For now, what I'm doing, is dividing the interval up into x bite chunks
+# and running the cron job that often. The problem comes where the interval
+# doesn't evenly divide up into x, leaving us taking to many, or too
+# few snapshots at the edge of time intervals.
+#
+# A new implementation of cron would be nice, but until then, we'll
+# just live with this.
+#
+function add_cron_job { # $INTERVAL $PERIOD $OFFSET $FMRI
+	
+	case $INTERVAL in
+	'minutes')
+		TIMES=$(get_divisor 0 59 $PERIOD)
+		ENTRY="$TIMES * * * *"		
+	;;
+
+	'hours')
+		TIMES=$(get_divisor 0 23 $PERIOD)
+		ENTRY="0 $TIMES * * *"
+	;;
+
+	'days')
+		TIMES=$(get_divisor 1 31 $PERIOD)
+		ENTRY="0 0 $TIMES * *"
+	;;
+
+	'months')
+		TIMES=$(get_divisor 1 12 $PERIOD)
+		ENTRY="0 0 1 $TIMES *"
+	;;
+	esac
+
+	# adding a cron job is essentially just looking for an existing entry,
+	# removing it, and appending a new one. Neato.
+	crontab -l | grep -v "/lib/svc/method/zfs-auto-snapshot $FMRI$" > /tmp/saved-crontab.$$
+	echo "${ENTRY} /lib/svc/method/zfs-auto-snapshot $FMRI" >> /tmp/saved-crontab.$$
+	crontab /tmp/saved-crontab.$$
+	rm /tmp/saved-crontab.$$
+	return $?
+}
+
+
+
+# this function removes a cron job was taking snapshots of $FMRI
+# $1 is assumed to be a valid FMRI
+function unschedule_snapshots {
+
+	FMRI=$1
+	# need work in here to remove the cron job
+	crontab -l | grep -v "/lib/svc/method/zfs-auto-snapshot $FMRI$" > /tmp/saved-crontab.$$
+	crontab /tmp/saved-crontab.$$
+	rm /tmp/saved-crontab.$$
+	return 0;
+}
+
+
+# this function actually takes the snapshot of the filesystem. This is what
+# really does the work. We name snapshots based on a standard time format
+# $1 is assumed to be a valid FMRI
+function take_snapshot {
+
+	FMRI=$1
+
+	DATE=$(date +%F-%H:%M:%S)
+	SNAPNAME="zfs-auto-snap-${DATE}"
+	FILESYS=$(svcprop -p zfs/fs-name $FMRI)
+	KEEP=$(svcprop -p zfs/keep $FMRI)
+	SNAP_CHILDREN=$(svcprop -p zfs/snapshot-children $FMRI)
+	
+	if [ "${KEEP}" != "all" ]
+	then
+	   # count snapshots of this FS to see if we need to delete old ones
+	   NUM_SNAPS=$(zfs list -H -t snapshot | grep "$FILESYS@zfs-auto-snap" | wc -l)
+	   if [ "${NUM_SNAPS}" -ge "${KEEP}" ]
+	   then
+		echo "Deleting snapshots for $FILESYS@zfs-auto-snap is not yet supported"
+		# FIXME : destroy oldest snapshot
+		# this is not yet implemented, as I'm waiting for Sarah's
+		# zfs -s, to allow me to sort snapshots by creation date,
+		# and then delete the oldest (tail -1)..
+	   fi
+	fi
+
+	# Ok, now say cheese! It'd be nice if the child snapshotting was
+	# atomic, but we don't yet have that in zfs.
+	if [ "${SNAP_CHILDREN}" = "true" ]
+	then
+	   for child in $(zfs list -r -H -o name -t filesystem $FILESYS)
+	   do
+		zfs snapshot $child@$SNAPNAME
+	   done
+        else
+	   zfs snapshot $FILESYS@$SNAPNAME
+	fi
+}
+
+
+# Given a range start, end and width of period, return a comma
+# separated string of numbers within that range and conforming to
+# that period. This isn't ideal, but it'll do
+#
+function get_divisor { # start period, end period, width of period
+
+    START=$1
+    END=$2
+    WIDTH=$3
+    RANGE=$START
+    JUMP=$(( $RANGE + $WIDTH ))
+
+    while [ $JUMP -lt $END ]
+    do
+	RANGE="$RANGE,$JUMP"
+	JUMP=$(( $JUMP + $WIDTH ))
+    done
+	
+    echo $RANGE
+}
+
+
+
+# Here's the beginning of the main script. As we're a method script for SMF,
+# we take start and stop arguments, and assume that the $SMF_FMRI value is being
+# set. For start and stop, our task is to create a cron job that will take a
+# snapshot of the specified filesystem.
+#
+# Without start | stop arguments, we assume we're being called from the cron job
+# created above, where the argument is the FMRI containing properties we can
+# consult to in order to actually take the snapshot.
+
+# $1 start | stop | an FMRI that we want to take snapshots of.
+case "$1" in
+'start')
+
+	schedule_snapshots $SMF_FMRI
+	if [ $? -eq 0 ]
+ 	then
+		result=$SMF_EXIT_OK
+	else
+		echo "Uhho, something went wrong"
+		result=$SMF_EXIT_ERR_FATAL
+	fi
+        ;;
+
+'stop')
+	unschedule_snapshots $SMF_FMRI
+	if [ $? -eq 0 ]
+ 	then
+		result=$SMF_EXIT_OK
+	else
+		echo "Uhho something went wrong"
+		result=$SMF_EXIT_ERR_FATAL
+	fi
+        ;;
+
+# the default case, we actually call from the cron job itself that's
+# executing this script.
+*)
+	SMF_FMRI=$1
+	# are we being called with the correct argument (an FMRI) ?
+
+	echo $SMF_FMRI | grep "^svc:/"
+	if [ $? -eq 0 ]
+	then
+	   take_snapshot $SMF_FMRI
+	   if [ $? -eq 0 ]
+	   then
+  		result=$SMF_EXIT_OK
+   	   else
+		result=$SMF_EXIT_ERR_FATAL
+	   fi
+
+	else
+
+	   echo "Usage from SMF : zfs-auto-snapshot [start | stop]"
+	   echo "Usage from cron: zfs-auto-snapshot svc:/system/filesystem/zfs/auto-snapshot:instance"
+
+       fi
+	;;
+
+esac
+
+exit $result

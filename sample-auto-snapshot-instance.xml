@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<!DOCTYPE service_bundle SYSTEM "/usr/share/lib/xml/dtd/service_bundle.dtd.1">
+<service_bundle type='manifest' name='space-timf'>
+<service
+	name='system/filesystem/zfs/auto-snapshot'
+	type='service'
+	version='1'>
+	<create_default_instance enabled='false' />
+
+	<instance name='space-timf' enabled='false' >
+
+        <exec_method
+		type='method'
+		name='start'
+		exec='/lib/svc/method/zfs-auto-snapshot start'
+		timeout_seconds='10' />
+
+	<exec_method
+		type='method'
+		name='stop'
+		exec='/lib/svc/method/zfs-auto-snapshot stop'
+		timeout_seconds='10' />
+
+        <property_group name='startd' type='framework'>
+        	<propval name='duration' type='astring' value='transient' />
+        </property_group>
+
+	<property_group name="zfs" type="application">
+	  <propval name="fs-name" type="astring" value="space/timf" 
+		   override="true"/>
+	  <propval name="interval" type="astring" value="minutes"
+		   override="true"/>
+	  <propval name="period" type="astring" value="30"
+		   override="true"/>
+	  <propval name="offset" type="astring" value="0"
+		   override="true"/>
+	  <propval name="keep" type="astring" value="all"
+		   override="true"/>
+	  <propval name="snapshot-children" type="boolean" value="false"
+		   override="true"/>
+	</property_group>
+
+	</instance>
+
+	<stability value='Unstable' />
+</service>
+</service_bundle>
