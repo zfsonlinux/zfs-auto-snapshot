@@ -36,7 +36,7 @@
 # snapshot, destroy a snapshot as per the snapshot retention policy, unable to
 # zfs send a dataset (if configured) or is unable to create or update the cron
 # job.
-# 
+#
 
 
 
@@ -63,7 +63,18 @@ PREFIX="zfs-auto-snap"
 # clients can get confused by colons. Who knew?
 SEP=":"
 
+# This variable gets set to the restarter/logfile property
+# whenever we have $FMRI defined. Used by the print_log and
+# print_note functions below for all output, it's definied
+# by the schedule_snapshots take_snapshots and unschedule_snapshots
+# methods.
+LOG=""
 
+
+# Determine whether this invocation of the script can use
+# the recursive snapshot feature in some versions of ZFS.
+# a null string in this variable says we don't.
+HAS_RECURSIVE=$(zfs snapshot 2>&1 | fgrep -e '-r')
 
 # this function validates the properties in the FMRI passed to it, then
 # calls a function to create cron job that schedules a snapshot schedule based
@@ -84,22 +95,21 @@ function schedule_snapshots {
 
 	case $BACKUP in
 	'full' | 'incremental' )
-		if [ -z "${BACKUP_SAVE_CMD}" ]
-		then
-		  check_failure 1 "Backup requested, but no backup command specified."
-		fi
+	    if [ -z "${BACKUP_SAVE_CMD}" ] ; then
+	        check_failure 1 \
+		    "Backup requested, but no backup command specified."
+	    fi
 	;;
 	esac
 
 	# for now, we're forcing the offset to be 0 seconds.
 	typeset OFFSET=0
 
-	if [ "$FILESYS" != "//" ]
-        then
-                # validate the filesystem
-                zfs list $FILESYS 2>&1 1> /dev/null
-                check_failure $? "ZFS filesystem does not exist!"
-        fi
+	if [ "$FILESYS" != "//" ] ; then
+	    # validate the filesystem
+	    zfs list $FILESYS 2>&1 1> /dev/null
+	    check_failure $? "ZFS filesystem does not exist!"
+	fi
 
 	# remove anything that's there at the moment
 	unschedule_snapshots $FMRI		
@@ -108,11 +118,10 @@ function schedule_snapshots {
 	
 	# finally, check our status before we return
 	STATE=$(svcprop -p restarter/state $FMRI)
-	if [ "${STATE}" == "maintenance" ]
-	then
-		STATE=1
+	if [ "${STATE}" == "maintenance" ] ; then
+	    STATE=1
 	else
-		STATE=0
+	    STATE=0
 	fi	
 	return $STATE
 }
@@ -139,51 +148,53 @@ function add_cron_job { # $INTERVAL $PERIOD $OFFSET $FMRI
 
 	case $INTERVAL in
 	'minutes')
-		TIMES=$(get_divisor 0 59 $PERIOD)
-		ENTRY="$TIMES * * * *"		
+	    TIMES=$(get_divisor 0 59 $PERIOD)
+	    ENTRY="$TIMES * * * *"		
 	;;
 
 	'hours')
-		TIMES=$(get_divisor 0 23 $PERIOD)
-		ENTRY="0 $TIMES * * *"
+	    TIMES=$(get_divisor 0 23 $PERIOD)
+	    ENTRY="0 $TIMES * * *"
 	;;
 
 	'days')
-		TIMES=$(get_divisor 1 31 $PERIOD)
-		ENTRY="0 0 $TIMES * *"
+	    TIMES=$(get_divisor 1 31 $PERIOD)
+	    ENTRY="0 0 $TIMES * *"
 	;;
 
 	'months')
-		TIMES=$(get_divisor 1 12 $PERIOD)
-		ENTRY="0 0 1 $TIMES *"
+	    TIMES=$(get_divisor 1 12 $PERIOD)
+	    ENTRY="0 0 1 $TIMES *"
 	;;
 	esac
 
 	# Since we may have multiple instances all trying to start at
 	# the same time, we need some form of locking around crontab.
- 	# Normally we'd be able to get SMF to manage this, by defining dependencies - 
+ 	# Normally we'd be able to get SMF to manage this, by defining dependencies -
 	# but I'm not sure there's a way to prevent it from starting two instances
 	# at the same time (without requiring users to explicitly state dependencies
 	# and change them each time new instances are added)
 
-	# This isn't perfect (eg. if someone else if running crontab at the
+	# This isn't perfect (eg. if someone else is running crontab at the
 	# same time as us, we'll fail) but it'll do for now.
 	LOCK_OWNED="false"
-	while [ "$LOCK_OWNED" == "false" ]
-	do
-		mkdir /tmp/zfs-auto-snapshot-lock
-		if [ $? -eq 0 ]
-		then
-			LOCK_OWNED=true
-		else
-			sleep 1
-		fi
+	while [ "$LOCK_OWNED" == "false" ] ; do
+	    mkdir /tmp/zfs-auto-snapshot-lock > /dev/null 2>&1
+	    if [ $? -eq 0 ] ; then
+	        LOCK_OWNED=true
+	    else
+	        sleep 1
+	    fi
 	done
 
 	# adding a cron job is essentially just looking for an existing entry,
 	# removing it, and appending a new one. Neato.
-	crontab -l | grep -v "/lib/svc/method/zfs-auto-snapshot $FMRI$" > /tmp/saved-crontab.$$
-	echo "${ENTRY} /lib/svc/method/zfs-auto-snapshot $FMRI" >> /tmp/saved-crontab.$$
+	crontab -l | grep -v "/lib/svc/method/zfs-auto-snapshot $FMRI$" \
+	    > /tmp/saved-crontab.$$
+
+	echo "${ENTRY} /lib/svc/method/zfs-auto-snapshot $FMRI" \
+	    >> /tmp/saved-crontab.$$
+
 	crontab /tmp/saved-crontab.$$
 	check_failure $? "Unable to add cron job!"
 	
@@ -203,18 +214,18 @@ function unschedule_snapshots {
 
 	# See notes on $LOCK_OWNED variable in function add_cron_job
         LOCK_OWNED="false"
-        while [ "$LOCK_OWNED" == "false" ]
-        do
-                mkdir /tmp/zfs-auto-snapshot-lock
-                if [ $? -eq 0 ]
-                then
-                        LOCK_OWNED=true
-                else
-                        sleep 1
-                fi
-        done
+        while [ "$LOCK_OWNED" == "false" ]; do
+	    mkdir /tmp/zfs-auto-snapshot-lock > /dev/null 2>&1
+	    if [ $? -eq 0 ] ; then
+	        LOCK_OWNED=true
+	    else
+	        sleep 1
+	    fi
+	done
 
-	crontab -l | grep -v "/lib/svc/method/zfs-auto-snapshot $FMRI$" > /tmp/saved-crontab.$$
+	crontab -l | grep -v "/lib/svc/method/zfs-auto-snapshot $FMRI$" \
+	    > /tmp/saved-crontab.$$
+
 	crontab /tmp/saved-crontab.$$
 	check_failure $? "Unable to unschedule snapshots for $FMRI"
 
@@ -223,21 +234,19 @@ function unschedule_snapshots {
 
 	# finally, check our status before we return
 	STATE=$(svcprop -p restarter/state $FMRI)
-	if [ "${STATE}" == "maintenance" ]
-	then
-		STATE=1
+	if [ "${STATE}" == "maintenance" ] ; then
+	    STATE=1
 	else
-		STATE=0
+	    STATE=0
 	fi
 }
 
 
-# This function actually takes the snapshot of the filesystem. This is what
-# really does the work. We name snapshots based on a standard time format
+# This function actually takes the snapshot of the filesystem.
 # $1 is assumed to be a valid FMRI
 function take_snapshot {
-
-	typeset FMRI=$1
+	# want this to be global, used by check_failure
+	FMRI=$1
 
 	typeset DATE=$(date +%F-%H${SEP}%M${SEP}%S)
 	typeset FILESYS=$(svcprop -p zfs/fs-name $FMRI)
@@ -245,8 +254,8 @@ function take_snapshot {
 	typeset SNAP_CHILDREN=$(svcprop -p zfs/snapshot-children $FMRI)
 
 	typeset BACKUP=$(svcprop -p zfs/backup $FMRI)
-	typeset STATE=0
 
+	typeset STATE=0
 
 	# an identifier allows us to setup multiple snapshot schedules
 	# per filesystem - so we append a <sep><label> token if the user has
@@ -256,24 +265,21 @@ function take_snapshot {
 	# Shocking, I know.
 	typeset LABEL="$(svcprop -p zfs/label $FMRI)"
 	
-
 	# the "//" filesystem is special. We use it as a keyword
-	# to determine whether to poll the ZFS "com.sun:auto-snapshot:${LABEL}" 
+	# to determine whether to poll the ZFS "com.sun:auto-snapshot:${LABEL}"
 	# user property which specifies which datasets should be snapshotted
 	# and under which "label" - a set of default service instances that
 	# snapshot at defined periods (daily, weekly, monthly, every 15 mins)
-	if [ "$FILESYS" == "//" ]
-	then
-		FILESYS=$(get_snapshot_datasets $LABEL)
+	if [ "$FILESYS" == "//" ] ; then
+	    FILESYS=$(get_snapshot_datasets $LABEL $SNAP_CHILDREN)
 	else
-		FILESYS=$FILESYS
+	    FILESYS=$FILESYS
 	fi
 
-	if [ "$LABEL" != "\"\"" ]
-	then
-		LABEL="${SEP}${LABEL}"
+	if [ "$LABEL" != "\"\"" ] ; then
+	    LABEL="${SEP}${LABEL}"
 	else
-		LABEL=""
+	    LABEL=""
 	fi
 
 	# A flag for whether we're running in verbose mode or not
@@ -284,89 +290,71 @@ function take_snapshot {
 	# Determine whether we should avoid scrubbing
 	typeset AVOIDSCRUB=$(svcprop -p zfs/avoidscrub $FMRI)
 
-
 	# prune out the filesystems that are on pools currently being
 	# scrubbed or resilvered. There's a risk that a scrub/resilver
 	# will be started just after this check completes, but there's
 	# also the risk that a running scrub will complete just after this
 	# check. Life's hard.
-	if [ "$AVOIDSCRUB" == "true" ]
-	then
-		# a cache of the pools that are known not to be scrubbing
-		NOSCRUBLIST=""
+	if [ "$AVOIDSCRUB" == "true" ] ; then
+	    # a cache of the pools that are known not to be scrubbing
+	    NOSCRUBLIST=""
 
-		# Create a list of filesystems scheduled for snapshots
-		# that are *not* on pools that are being scrubbed/resilvered
-		for fs in $FILESYS
-		do
-			POOL=$(echo $fs | cut -d/ -f1)
-			if is_scrubbing $POOL "$NOSCRUBLIST"
-			then
-				print_log "Pool containing $fs is being scrubbed/resilvered."
-				print_log "Not taking snapshots for $fs."
-			else
-				NOSCRUBLIST="$POOL $NOSCRUBLIST"
-				NOSCRUBFILESYS="$NOSCRUBFILESYS $fs"
-			fi
-		done		
-		FILESYS="$NOSCRUBFILESYS"
+	    # Create a list of filesystems scheduled for snapshots
+	    # that are *not* on pools that are being scrubbed/resilvered
+	    for fs in $FILESYS ; do
+		POOL=$(echo $fs | cut -d/ -f1)
+		if is_scrubbing $POOL "$NOSCRUBLIST" ; then
+		    print_log "Pool containing $fs is being scrubbed/resilvered."
+		    print_log "Not taking snapshots for $fs."
+		else
+		    NOSCRUBLIST="$POOL $NOSCRUBLIST"
+		    NOSCRUBFILESYS="$NOSCRUBFILESYS $fs"
+		fi
+	    done		
+	    FILESYS="$NOSCRUBFILESYS"
 	fi
 
 	# walk each of the filesystems specified
-	for fs in $FILESYS
-	do
-		# Ok, now say cheese! If we're taking recursive snapshots,
-		# walk through the children, destroying old ones if required.
-		if [ "${SNAP_CHILDREN}" == "true" ]
-		then
-	
-		   # check if we have recursive snapshot capability, seeing 
-		   # a null string in this variable says we don't.
-		   HAS_RECURSIVE=$(zfs snapshot 2>&1 | fgrep -e '-r')
-	
-		   for child in $(zfs list -r -H -o name -t filesystem,volume $fs)
-		   do
-			destroy_older_snapshots $child $KEEP $LABEL
-			if [ -z "${HAS_RECURSIVE}" ]
-			then
-			   print_note "Taking snapshot $child@$SNAPNAME"
-		     	   zfs snapshot $child@$SNAPNAME
-			   check_failure $? "Unable to take snapshot $child@$SNAPNAME."
-			fi
-		   done
-	           # take the recursive snapshots if we have the ability
-	           if [ -n "${HAS_RECURSIVE}" ]
-		   then
-		       print_note "Taking recursive snapshot $fs@$SNAPNAME" 
-	               zfs snapshot -r $fs@$SNAPNAME
-		       check_failure $? "Unable to take recursive snapshots $fs@$SNAPNAME."
-	           fi
-	
-	        else
+	for fs in $FILESYS ; do
+	    # Ok, now say cheese! If we're taking recursive snapshots,
+	    # walk through the children, destroying old ones if required.
+	    if [ "${SNAP_CHILDREN}" == "true" ] ;  then
 
-	  	   destroy_older_snapshots $fs $KEEP $LABEL
-		   print_note "Taking snapshot $fs@$SNAPNAME"
-		   zfs snapshot $fs@$SNAPNAME
-		   check_failure $? "Unable to take snapshot $fs@$SNAPNAME."
+		if [ -z "${HAS_RECURSIVE}" ] ; then
+	   	    for child in $(zfs list -r -H -o name -t filesystem,volume $fs) ; do
+		        destroy_older_snapshots $child $KEEP $LABEL
+		        print_note "Taking snapshot $child@$SNAPNAME"
+		        zfs snapshot $child@$SNAPNAME
+			check_failure $? "Unable to take snapshot $child@$SNAPNAME."
+		    done
+		else
+		    destroy_older_snapshots $fs $KEEP $LABEL $HAS_RECURSIVE
+	            print_note "Taking recursive snapshot $fs@$SNAPNAME"
+	            zfs snapshot -r $fs@$SNAPNAME
+		    check_failure $? "Unable to take recursive snapshots of $fs@$SNAPNAME."
+	        fi
 	
-		fi
+	    else
+	         destroy_older_snapshots $fs $KEEP $LABEL
+		 print_note "Taking snapshot $fs@$SNAPNAME"
+		 zfs snapshot $fs@$SNAPNAME
+		 check_failure $? "Unable to take snapshot $fs@$SNAPNAME."
+	    fi
 
-		# If the user has asked for backups, go ahead and do this.
-		if [ "${BACKUP}" != "none" ]
-		then
-			take_backup $fs $BACKUP "$LABEL" $FMRI
-			check_failure $? "Unable to backup filesystem $fs using \
-					$BACKUP backup strategy."
-		fi
+	    # If the user has asked for backups, go ahead and do this.
+	    if [ "${BACKUP}" != "none" ] ;  then
+	        take_backup $fs $BACKUP "$LABEL" $FMRI
+	        check_failure $? "Unable to backup filesystem $fs using \
+		        $BACKUP backup strategy."
+	    fi
 
 	done
 	# finally, check our status before we return
 	STATE=$(svcprop -p restarter/state $FMRI)
-	if [ "${STATE}" == "maintenance" ]
-	then
-		STATE=1
+	if [ "${STATE}" == "maintenance" ] ; then
+	    STATE=1
 	else
-		STATE=0
+	    STATE=0
 	fi
 	return $STATE
 }
@@ -383,28 +371,31 @@ function destroy_older_snapshots {
 	typeset FILESYS=$1
 	typeset COUNTER=$2
 	typeset LABEL=$3
+	typeset HAS_RECURSIVE=$4
 
-	if [ "${COUNTER}" == "all" ]
-	then
-		return 0
+	if [ "${COUNTER}" == "all" ] ; then
+	    return 0
+	fi
+
+	if [ -n "${HAS_RECURSIVE}" ] ; then
+	    typeset RECURSIVE="-r"
 	fi
 	
 	COUNTER=$(($COUNTER - 1))
-	
 	# walk through the snapshots, newest first, destroying older ones
 	for snapshot in $(zfs list -r -t snapshot -H -o name $FILESYS \
-		 | grep "$FILESYS@${PREFIX}${LABEL}" | sort -r)
-	do
-		if [ $COUNTER -le 0 ]
-		then
-			# using print_note, as this checks our $VERBOSE flag
-			print_note "$snapshot being destroyed as per retention policy."
-			zfs destroy $snapshot
-			check_failure $? "Unable to destroy $snapshot"
-		else
-			# don't destroy this one			
-			COUNTER=$(($COUNTER - 1))
-		fi
+		 | grep "$FILESYS@${PREFIX}${LABEL}" | sort -r) ; do
+
+	    if [ $COUNTER -le 0 ] ; then
+	        # using print_note, as this checks our $VERBOSE flag
+	        print_note "$snapshot being destroyed ${RECURSIVE} as per \
+ retention policy."
+	        zfs destroy ${RECURSIVE} $snapshot
+	        check_failure $? "Unable to destroy $snapshot"
+	    else
+	        # don't destroy this one			
+	        COUNTER=$(($COUNTER - 1))
+	    fi
 	done
 }
 
@@ -414,15 +405,14 @@ function destroy_older_snapshots {
 # as passed into this function.
 #
 function check_failure { # integer exit status, error message to display
-  
+
 	typeset RESULT=$1
 	typeset ERR_MSG=$2
 
-	if [ $RESULT -ne 0 ]
-	then
-		print_log "Error: $ERR_MSG"
-		print_log "Moving service $FMRI to maintenance mode."
-		svcadm mark maintenance $FMRI
+	if [ $RESULT -ne 0 ] ; then
+	    print_log "Error: $ERR_MSG"
+	    print_log "Moving service $FMRI to maintenance mode."
+	    svcadm mark maintenance $FMRI
 	fi
 
 }
@@ -431,18 +421,19 @@ function check_failure { # integer exit status, error message to display
 # A function we use to emit output. Right now, this goes to syslog via logger(1)
 # but it would be much nicer to be able to print it to the svc log file for
 # each individual service instance - tricky because we're being called from
-# cron, most of the time and are detached from smf.
+# cron, most of the time and are detached from smf. Working around this by
+# appending to the $LOG file
 function print_log { # message to display
-
 	logger -t zfs-auto-snap -p daemon.notice $*
+	echo $(date) $* >> $LOG
 }
 
 # Another function to emit output, this time checking to see if the
 # user has set the service into verbose mode, otherwise, we print nothing
 function print_note { # mesage to display
-	if [ "$VERBOSE" == "true" ]
-	then
-		logger -t zfs-auto-snap -p daemon.notice $*
+	if [ "$VERBOSE" == "true" ] ; then
+	    logger -t zfs-auto-snap -p daemon.notice $*
+	    echo $(date) $* >> $LOG
 	fi
 }
 
@@ -453,19 +444,18 @@ function print_note { # mesage to display
 #
 function get_divisor { # start period, end period, width of period
 
-    typeset START=$1
-    typeset END=$2
-    typeset WIDTH=$3
-    typeset RANGE=$START
-    typeset JUMP=$(( $RANGE + $WIDTH ))
+	typeset START=$1
+	typeset END=$2
+	typeset WIDTH=$3
+	typeset RANGE=$START
+	typeset JUMP=$(( $RANGE + $WIDTH ))
 
-    while [ $JUMP -le $END ]
-    do
-	RANGE="$RANGE,$JUMP"
-	JUMP=$(( $JUMP + $WIDTH ))
-    done
+	while [ $JUMP -le $END ] ; do
+	    RANGE="$RANGE,$JUMP"
+	    JUMP=$(( $JUMP + $WIDTH ))
+	done
 	
-    echo $RANGE
+	echo $RANGE
 }
 
 
@@ -515,8 +505,7 @@ function take_backup { # filesystem backup-type label fmri
     typeset BACKUP_DATASETS=""
 
     # Determine how many datasets we have to backup
-    if [ "$SNAP_CHILDREN" == "true" ]
-    then
+    if [ "$SNAP_CHILDREN" == "true" ] ; then
 	BACKUP_DATASETS=$(zfs list -r -H -o name -t filesystem,volume $FILESYS)
     else
         # only one dataset to worry about here.
@@ -524,8 +513,7 @@ function take_backup { # filesystem backup-type label fmri
     fi
 
     # loop through the datasets, backing up each one.
-    for dataset in $BACKUP_DATASETS
-    do
+    for dataset in $BACKUP_DATASETS ; do
 
       # An initial check of the input parameters, to see how we should proceed
       case $BACKUP in
@@ -556,9 +544,9 @@ function take_backup { # filesystem backup-type label fmri
 	;;
        esac
 
- 
+
        # Now perform the backup. Note that on errors, we'll immediately mark
-       # the service as being in maintenance mode, however, backups will still 
+       # the service as being in maintenance mode, however, backups will still
        # be attempted for other datasets in our list.
        case $BACKUP in
 	"incremental")
@@ -580,12 +568,21 @@ function take_backup { # filesystem backup-type label fmri
 
 }
 
-# Get a list of filesystem we should snapshot
-function get_snapshot_datasets { #LABEL
+# Get a list of filesystem we should snapshot. If snap_children is "true"
+# then we don't list children that inherit the parent's property - we just look
+# for locally set properties, and let "zfs snapshot -r" snapshot the children.
+function get_snapshot_datasets { #LABEL #SNAP_CHILDREN
 
 	typeset LABEL=$1
-	typeset FS=$(zfs list -t filesystem -o name,com.sun:auto-snapshot:$LABEL \
-			| grep true | awk '{print $1}')
+	typeset SNAP_CHILDREN=$2
+	if [ "${SNAP_CHILDREN}" = "true" ] ; then
+	    typeset FS=$(zfs get com.sun:auto-snapshot:$LABEL \
+	        | grep local | grep true | awk '{print $1}')
+	else
+	    typeset FS=$(zfs list -t filesystem,volume \
+		-o name,com.sun:auto-snapshot:$LABEL \
+	        | grep true | awk '{print $1}')
+	fi
 	echo "$FS"
 }
 
@@ -608,17 +605,15 @@ function is_scrubbing { # POOL SCRUBLIST
 	# the pool name in a known list of pools that were not scrubbing
 	# the last time we checked.
 	echo "$NOSCRUBLIST" | grep "$POOL " > /dev/null
-	if [ $? -eq 0 ]
-	then
-		return 1
+	if [ $? -eq 0 ] ; then
+	    return 1
 	fi
 
 	SCRUBBING=$(env LC_ALL=C zpool status $POOL | grep " in progress")
-	if [ -z "$SCRUBBING" ]
-	then
-		return 1
+	if [ -z "$SCRUBBING" ] ; then
+	    return 1
 	else
-		return 0
+	    return 0
 	fi
 }
 
@@ -638,24 +633,24 @@ function is_scrubbing { # POOL SCRUBLIST
 case "$1" in
 'start')
 
+	export LOG=$(svcprop -p restarter/logfile $SMF_FMRI)
 	schedule_snapshots $SMF_FMRI
-	if [ $? -eq 0 ]
- 	then
-		result=$SMF_EXIT_OK
+	if [ $? -eq 0 ] ; then
+	    result=$SMF_EXIT_OK
 	else
-		print_log "Problem taking snapshots for $SMF_FMRI"
-		result=$SMF_EXIT_ERR_FATAL
+	    print_log "Problem taking snapshots for $SMF_FMRI"
+	    result=$SMF_EXIT_ERR_FATAL
 	fi
         ;;
 
 'stop')
+	export LOG=$(svcprop -p restarter/logfile $SMF_FMRI)
 	unschedule_snapshots $SMF_FMRI
-	if [ $? -eq 0 ]
- 	then
-		result=$SMF_EXIT_OK
+	if [ $? -eq 0 ] ; then
+	    result=$SMF_EXIT_OK
 	else
-		print_log "Problem taking snapshots for $SMF_FMRI"
-		result=$SMF_EXIT_ERR_FATAL
+	    print_log "Problem taking snapshots for $SMF_FMRI"
+	    result=$SMF_EXIT_ERR_FATAL
 	fi
         ;;
 
@@ -667,12 +662,12 @@ case "$1" in
 
 	case $SMF_FMRI in
 		svc:/*)
+			export LOG=$(svcprop -p restarter/logfile $SMF_FMRI)
 			take_snapshot $SMF_FMRI
-			if [ $? -eq 0 ]
-			then
-				result=$SMF_EXIT_OK
+			if [ $? -eq 0 ] ; then
+			    result=$SMF_EXIT_OK
 			else
-				result=$SMF_EXIT_ERR_FATAL
+			    result=$SMF_EXIT_ERR_FATAL
 			fi
 			;;
 		*)

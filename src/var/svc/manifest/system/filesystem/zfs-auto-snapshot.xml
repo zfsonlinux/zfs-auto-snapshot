@@ -22,7 +22,7 @@
 
  CDDL HEADER END
 
- Copyright 2006 Sun Microsystems, Inc.  All rights reserved.
+ Copyright 2008 Sun Microsystems, Inc.  All rights reserved.
  Use is subject to license terms.
 
 -->
@@ -32,7 +32,7 @@
 <service
 	name='system/filesystem/zfs/auto-snapshot'
 	type='service'
-	version='0.10'>
+	version='0.11'>
 
 	<!-- no point in being able to take snapshots if we don't have a fs -->
 	<dependency
@@ -56,58 +56,57 @@
 		<propval name='duration' type='astring' value='transient' />
 	</property_group>
 
-	<!-- the properties we expect that any instance will define
-	  they being :
+<!-- the properties we expect that any instance will define
+they being :
+	fs-name : The name of the filesystem we want to snapshot.
+	The special filesystem name "//" indicates we should
+	look at the com.sun:auto-snapshot:<label> ZFS user
+	property on datasets, set to "true" if the dataset
+	should have snapshots taken by this instance.
 
-	 	 fs-name : The name of the filesystem we want to snapshot.
-			   The special filesystem name "//" indicates we should
-			   look at the com.sun:auto-snapshot:<label> ZFS user
-			   property on datasets, set to "true" if the dataset
-			   should have snapshots taken by this instance.
+	interval : minutes | hours | days | months
 
-		interval : minutes | hours | days | months
+	period : How many (m,h,d,m) do we wait between snapshots
 
-		  period : How many (m,h,d,m) do we wait between snapshots
+	offset : The offset into the time period we want
 
-	          offset : The offset into the time period we want
-
-		    keep : How many snapshots we should keep, otherwise, we
-			   delete the oldest when we hit this threshold
+	keep : How many snapshots we should keep, otherwise, we
+		delete the oldest when we hit this threshold
 
        snapshot-children : Whether we should recursively snapshot
-			   all filesystems contained within.
+		all filesystems contained within.
 
-		  backup : If we want to perform a "zfs send" for our backup
-			   we set this - either to "full" or "incremental".
-			   If set to "none", we don't perform backups.
+	backup : If we want to perform a "zfs send" for our backup
+		we set this - either to "full" or "incremental".
+		If set to "none", we don't perform backups.
 
          backup-save-cmd : A command string to save the backup - if unset,
-			   we return an error and move the service to
-			   maintenance.
+		we return an error and move the service to
+		maintenance.
 
-             backup-lock : A string we set when a backup operation is in
-			   progress, to prevent two backups from the same
-			   service instance running into each other. Not
-			   completely flawless, but okay. Due to 6338294,
-			   we use the keyword "unlocked" to indicate that
-			   the lock is not held.	   
+	backup-lock : A string we set when a backup operation is in
+		progress, to prevent two backups from the same
+		service instance running into each other. Not
+		completely flawless, but okay. Due to 6338294,
+		we use the keyword "unlocked" to indicate that
+		the lock is not held.	   
 
-                   label : A string that allows us to differentiate this set
-			   of snapshot schedules from others configured for the
-			   same filesystem. This is not usually needed and can
-			   be left unset, but it can be useful in some 
-			   situations (particularly for backups).
+	label : A string that allows us to differentiate this set
+		of snapshot schedules from others configured for the
+		same filesystem. This is not usually needed and can
+		be left unset, but it can be useful in some 
+		situations (particularly for backups).
 
-		 verbose : Set to false by default, setting to true results
-			   in the service printing more detail in the log
-			   about what it's doing.
+	verbose : Set to false by default, setting to true results
+		in the service printing more detail in the log
+		about what it's doing.
 
-	      avoidscrub : Set to true by default, this determines whether
-			   we should avoid taking snapshots on any pools that have
-			   a scrub or resilver in progress.
-			   More info in the bugid:
-			   6343667 need itinerary so interrupted scrub/resilver
-				   doesn't have to start over
+	avoidscrub : Set to true by default, this determines whether
+		we should avoid taking snapshots on any pools that have
+		a scrub or resilver in progress.
+		More info in the bugid:
+		6343667 need itinerary so interrupted scrub/resilver
+			doesn't have to start over
 
 
 	 -->
@@ -194,7 +193,7 @@
 	<template>
 		<common_name>
 			<loctext xml:lang='C'>
-				ZFS automatic snapshots
+ZFS automatic snapshots
 			</loctext>
 		</common_name>
 		<description>
@@ -202,32 +201,17 @@
 This service provides system support for taking automatic snapshots of ZFS
 filesystems.
 
-In order to use this service, you must create a service instance per set of
-automatic snapshots you want to take.
+In order to use this service, you must create a service instance per set of automatic snapshots you want to take.
 
-The on starting a service instance, a cron job corresponding to the properties
-set in the instance is created on the host. This cron job will regularly take
-snapshots of the specified ZFS filesystem.
+The on starting a service instance, a cron job corresponding to the properties set in the instance is created on the host. This cron job will regularly take snapshots of the specified ZFS filesystem.
 
 On stopping the service, that cron job is removed.
 
-We also have the ability to perform backups, done using the "zfs send" command.
-A property set in the service called "backup-save-cmd" can be configured as the
-command used to save the backup stream. See the zfs(1M) man page for an example.
-The backups can be either "full" backups, or "incremental" backups - for each
-incremental backup, a full backup must be configured first. If for some reason
-an incremental backup fails, a full backup is performed instead.
+We also have the ability to perform backups, done using the "zfs send" command.  A property set in the service called "backup-save-cmd" can be configured as the command used to save the backup stream. See the zfs(1M) man page for an example.  The backups can be either "full" backups, or "incremental" backups - for each incremental backup, a full backup must be configured first. If for some reason an incremental backup fails, a full backup is performed instead.
 
-By default, snapshots will not be taken of any datasets resident on pools that
-are currently being scrubbed or resilvered. This can behaviour can be changed
-using the zfs/avoid scrub service property.
+By default, snapshots will not be taken of any datasets resident on pools that are currently being scrubbed or resilvered. This can behaviour can be changed using the zfs/avoid scrub service property.
 
-Care should be taken when configuring backups to ensure that the time
-granularity of the cron job is sufficient to allow the backup to complete
-between invocations of each backup. We perform locking to ensure that two
-backups of the same filesystem cannot run simultaneously, but will move the
-service into "maintenance" state should this occur.
-
+Care should be taken when configuring backups to ensure that the time granularity of the cron job is sufficient to allow the backup to complete between invocations of each backup. We perform locking to ensure that two backups of the same filesystem cannot run simultaneously, but will move the service into "maintenance" state should this occur.
 			</loctext>
 		</description>
 	</template>

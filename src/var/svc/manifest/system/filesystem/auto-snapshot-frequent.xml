@@ -4,12 +4,13 @@
 <service
 	name='system/filesystem/zfs/auto-snapshot'
 	type='service'
-	version='0.10'>
+	version='0.11'>
 
-	<!-- This is one of the default instances that comes with the	
-	ZFS Automatic Snapshot SMF Service. It snapshots all filesystems marked
-	with the ZFS User Property com.sun:auto-snapshot:frequent=true every
-	15 minutes, and keeps 4 of these snapshots into the past.
+<!-- This is one of the default instances that comes with the	
+ZFS Automatic Snapshot SMF Service. It recursively snapshots all
+filesystems marked with the ZFS User Property 
+com.sun:auto-snapshot:frequent=true every
+15 minutes, and keeps 4 of these snapshots into the past.
 	-->
 
 	<create_default_instance enabled='false' />
@@ -45,7 +46,7 @@
 		   override="true"/>
 	  <propval name="keep" type="astring" value="4"
 		   override="true"/>
-	  <propval name="snapshot-children" type="boolean" value="false"
+	  <propval name="snapshot-children" type="boolean" value="true"
 		   override="true"/>
 
 	  <propval name="backup" type="astring" value="none"

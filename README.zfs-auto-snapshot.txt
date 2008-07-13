@@ -1,15 +1,14 @@
 
 NAME 
 
-ZFS Automatic Snapshot SMF Service, version 0.10
-
+ZFS Automatic Snapshot SMF Service, version 0.11
 
 
 DESCRIPTION 
 
-This is a simple SMF service which you can configure to take automatic,
-scheduled snapshots of any given ZFS filesystem as well as perform simple
-incremental or full backups of that filesystem.
+This is a simple SMF service which can will take automatic,
+scheduled snapshots of given ZFS filesystems and can perform simple
+incremental or full backups of those filesystems.
 
 Documentation for the service is contained in the manifest file,
 zfs-auto-snapshot.xml.
@@ -21,9 +20,8 @@ This GUI is installed in the GNOME menu under:
 	Administration -> Automatic Snapshots
 
 We also bundle a simple GUI application, which will query the user for the
-properties required, and will proceed to build an instance manifest. This
+properties required, and will then build an instance manifest. This
 GUI is documented as part of the installation instructions below.
-
 
 
 INSTALLATION
@@ -64,6 +62,10 @@ The properties each instance needs are:
 			command:
 
 			# zfs set com.sun:auto-snapshot:frequent=true tank/timf
+			When the "snap-children" property is set to true,
+			only locally-set filesystem properties are used	to
+			determine which filesystems to snapshot -
+			property inheritance is not respected.
 
  zfs/interval		[ hours | days | months ]	
 
@@ -110,7 +112,7 @@ Usage: zfs-auto-snapshot-admin.sh [zfs filesystem name]
 
 EXAMPLES
 
-The following shows  me running it for the ZFS filesystem 
+The following shows us running it for the ZFS filesystem 
 "tank/root_filesystem".
 
 timf@haiiro[593] ./zfs-auto-snapshot-admin.sh tank/root_filesystem
@@ -144,5 +146,7 @@ http://blogs.sun.com/timf/entry/zfs_automatic_snapshot_service_logging
 http://blogs.sun.com/timf/entry/zfs_automatic_snapshots_0_8
 http://blogs.sun.com/timf/entry/zfs_automatic_for_the_people
 http://blogs.sun.com/timf/entry/zfs_automatic_snapshots_0_10
+http://blogs.sun.com/timf/entry/zfs_automatic_snapshots_0_11
 
 The ZFS Automatic Snapshot SMF Service is released under the terms of the CDDL.
+

@@ -37,10 +37,12 @@ FILES="auto-snapshot-daily.xml     auto-snapshot-monthly.xml auto-snapshot-frequ
 
 for manifest in $FILES
 do
+	echo Importing $manifest
 	/usr/sbin/svccfg import /var/svc/manifest/system/filesystem/$manifest
 done
 
 for fmri in $FMRIS
 do
+	echo Enabling $fmri
 	/usr/sbin/svcadm enable $fmri
 done

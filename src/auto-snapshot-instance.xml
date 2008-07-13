@@ -4,7 +4,7 @@
 <service
 	name='system/filesystem/zfs/auto-snapshot'
 	type='service'
-	version='0.10'>
+	version='0.11'>
 	<create_default_instance enabled='false' />
 
 	<instance name='tank-timf-torrent,foo' enabled='false' >
@@ -12,7 +12,6 @@
         <exec_method
 		type='method'
 		name='start'
-		exec='/lib/svc/method/zfs-auto-snapshot start'
 		timeout_seconds='10' />
 
 	<exec_method
