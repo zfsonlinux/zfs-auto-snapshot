@@ -76,6 +76,25 @@ LOG=""
 # a null string in this variable says we don't.
 HAS_RECURSIVE=$(zfs snapshot 2>&1 | fgrep -e '-r')
 
+
+# A function to pull in the variables from the FMRI given
+# as the first argument.
+function zfs_smf_props {
+
+	SMF_PROPS=$(svcprop -p zfs $1 | \
+	    sed -e 's#^zfs/fs-name#zfs/fs_name#g' \
+            -e 's#^zfs/backup-lock#zfs/backup_lock#g' \
+            -e 's#^zfs/snapshot-children#zfs/snapshot_children#g' \
+            -e 's#^zfs/backup-save-cmd#zfs/backup_save_cmd#g' \
+            -e 's#zfs/##g' |\
+            awk '{printf("%s=%s ",$1,$3)}')
+
+	for pair in $SMF_PROPS ; do
+	    export "$pair"
+	done
+}
+
+
 # this function validates the properties in the FMRI passed to it, then
 # calls a function to create cron job that schedules a snapshot schedule based
 # on the properties set in the service instance.
@@ -83,15 +102,16 @@ HAS_RECURSIVE=$(zfs snapshot 2>&1 | fgrep -e '-r')
 function schedule_snapshots {
 
 	typeset FMRI=$1
+	zfs_smf_props $1
 	# FIXME need work in here to actually validate the FMRI props
-	typeset FILESYS=$(svcprop -p zfs/fs-name $FMRI)
-	typeset INTERVAL=$(svcprop -p zfs/interval $FMRI)
-	typeset PERIOD=$(svcprop -p zfs/period $FMRI)
-	typeset OFFSET=$(svcprop -p zfs/offset $FMRI)
+	typeset FILESYS="$fs_name"
+	typeset INTERVAL="$interval"
+	typeset PERIOD="$period"
+	typeset OFFSET="$offset"
 	typeset STATE=0	
 
-	typeset BACKUP=$(svcprop -p zfs/backup $FMRI)
-	typeset BACKUP_SAVE_CMD=$(svcprop -p zfs/backup $FMRI)
+	typeset BACKUP="$backup"
+	typeset BACKUP_SAVE_CMD="$backup_save_cmd"
 
 	case $BACKUP in
 	'full' | 'incremental' )
@@ -247,13 +267,14 @@ function unschedule_snapshots {
 function take_snapshot {
 	# want this to be global, used by check_failure
 	FMRI=$1
+	zfs_smf_props $FMRI
 
 	typeset DATE=$(date +%F-%H${SEP}%M${SEP}%S)
-	typeset FILESYS=$(svcprop -p zfs/fs-name $FMRI)
-	typeset KEEP=$(svcprop -p zfs/keep $FMRI)
-	typeset SNAP_CHILDREN=$(svcprop -p zfs/snapshot-children $FMRI)
+	typeset FILESYS=$fs_name
+	typeset KEEP=$keep
+	typeset SNAP_CHILDREN=$snapshot_children
 
-	typeset BACKUP=$(svcprop -p zfs/backup $FMRI)
+	typeset BACKUP=$backup
 
 	typeset STATE=0
 
@@ -263,7 +284,7 @@ function take_snapshot {
 	# returns the value '""' for the empty string to differentiate
 	# between an unset property, and a set-but-empty property.
 	# Shocking, I know.
-	typeset LABEL="$(svcprop -p zfs/label $FMRI)"
+	typeset LABEL="$label"
 	
 	# the "//" filesystem is special. We use it as a keyword
 	# to determine whether to poll the ZFS "com.sun:auto-snapshot:${LABEL}"
@@ -283,12 +304,12 @@ function take_snapshot {
 	fi
 
 	# A flag for whether we're running in verbose mode or not
-	VERBOSE="$(svcprop -p zfs/verbose $FMRI)"
+	VERBOSE="$verbose"
 
 	typeset SNAPNAME="${PREFIX}${LABEL}-${DATE}"
 	
 	# Determine whether we should avoid scrubbing
-	typeset AVOIDSCRUB=$(svcprop -p zfs/avoidscrub $FMRI)
+	typeset AVOIDSCRUB=$avoidscrub
 
 	# prune out the filesystems that are on pools currently being
 	# scrubbed or resilvered. There's a risk that a scrub/resilver
@@ -499,9 +520,8 @@ function take_backup { # filesystem backup-type label fmri
 	svcadm refresh $FMRI
     fi
 
-    typeset BACKUP_SAVE_CMD=$(svcprop -p zfs/backup-save-cmd $FMRI \
-				| sed -e 's/\\//g')
-    typeset SNAP_CHILDREN=$(svcprop -p zfs/snapshot-children $FMRI)
+    typeset BACKUP_SAVE_CMD="$(echo $backup_save_cmd | sed -e 's/\\//g')"
+    typeset SNAP_CHILDREN=$snapshot_children
     typeset BACKUP_DATASETS=""
 
     # Determine how many datasets we have to backup
@@ -629,11 +649,13 @@ function is_scrubbing { # POOL SCRUBLIST
 # created above, where the argument is the FMRI containing properties we can
 # consult to in order to actually take the snapshot.
 
+zfs_smf_props $SMF_FMRI
+export LOG=$(svcprop -p restarter/logfile $SMF_FMRI)
+
 # $1 start | stop | an FMRI that we want to take snapshots of.
 case "$1" in
 'start')
 
-	export LOG=$(svcprop -p restarter/logfile $SMF_FMRI)
 	schedule_snapshots $SMF_FMRI
 	if [ $? -eq 0 ] ; then
 	    result=$SMF_EXIT_OK
@@ -644,7 +666,6 @@ case "$1" in
         ;;
 
 'stop')
-	export LOG=$(svcprop -p restarter/logfile $SMF_FMRI)
 	unschedule_snapshots $SMF_FMRI
 	if [ $? -eq 0 ] ; then
 	    result=$SMF_EXIT_OK
@@ -662,7 +683,6 @@ case "$1" in
 
 	case $SMF_FMRI in
 		svc:/*)
-			export LOG=$(svcprop -p restarter/logfile $SMF_FMRI)
 			take_snapshot $SMF_FMRI
 			if [ $? -eq 0 ] ; then
 			    result=$SMF_EXIT_OK
