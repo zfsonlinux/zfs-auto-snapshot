@@ -77,21 +77,31 @@ LOG=""
 HAS_RECURSIVE=$(zfs snapshot 2>&1 | fgrep -e '-r')
 
 
+function get_pair {
+        NAME=$1
+        shift 2
+        echo "${NAME}=\"$@\""
+        echo "export ${NAME}"
+}
+
 # A function to pull in the variables from the FMRI given
 # as the first argument.
 function zfs_smf_props {
 
-	SMF_PROPS=$(svcprop -p zfs $1 | \
-	    sed -e 's#^zfs/fs-name#zfs/fs_name#g' \
-            -e 's#^zfs/backup-lock#zfs/backup_lock#g' \
-            -e 's#^zfs/snapshot-children#zfs/snapshot_children#g' \
-            -e 's#^zfs/backup-save-cmd#zfs/backup_save_cmd#g' \
-            -e 's#zfs/##g' |\
-            awk '{printf("%s=%s ",$1,$3)}')
-
-	for pair in $SMF_PROPS ; do
-	    export "$pair"
-	done
+IFS="
+"
+SMF_PROPS="$(svcprop -t -p zfs $1 |\
+            sed -e 's#zfs/fs-name#zfs/fs_name#g' \
+        -e 's#zfs/backup-lock#zfs/backup_lock#g' \
+        -e 's#zfs/snapshot-children#zfs/snapshot_children#g' \
+        -e 's#zfs/backup-save-cmd#zfs/backup_save_cmd#g' \
+        -e 's#zfs/##g' -e 's/$/,/g')"
+IFS=,
+for line in $SMF_PROPS ; do
+        IFS=' 	
+'
+        eval $(get_pair $line)
+done
 }
 
 
@@ -186,6 +196,10 @@ function add_cron_job { # $INTERVAL $PERIOD $OFFSET $FMRI
 	    TIMES=$(get_divisor 1 12 $PERIOD)
 	    ENTRY="0 0 1 $TIMES *"
 	;;
+
+	'none')
+	    return 0
+	;;
 	esac
 
 	# Since we may have multiple instances all trying to start at
@@ -231,6 +245,12 @@ function add_cron_job { # $INTERVAL $PERIOD $OFFSET $FMRI
 function unschedule_snapshots {
 
 	typeset FMRI=$1
+	typeset INTERVAL=$interval
+
+	# interval set to 'none' means we don't want cron jobs
+	if [ "$INTERVAL" == "none" ]; then
+	    return 0
+	fi
 
 	# See notes on $LOCK_OWNED variable in function add_cron_job
         LOCK_OWNED="false"
@@ -269,6 +289,7 @@ function take_snapshot {
 	FMRI=$1
 	zfs_smf_props $FMRI
 
+	export LOG=$log
 	typeset DATE=$(date +%F-%H${SEP}%M${SEP}%S)
 	typeset FILESYS=$fs_name
 	typeset KEEP=$keep
@@ -649,13 +670,14 @@ function is_scrubbing { # POOL SCRUBLIST
 # created above, where the argument is the FMRI containing properties we can
 # consult to in order to actually take the snapshot.
 
-zfs_smf_props $SMF_FMRI
-export LOG=$(svcprop -p restarter/logfile $SMF_FMRI)
+if [ -n "${SMF_FMRI}" ] ; then
+	zfs_smf_props $SMF_FRI
+	export LOG=${log}
+fi
 
 # $1 start | stop | an FMRI that we want to take snapshots of.
 case "$1" in
 'start')
-
 	schedule_snapshots $SMF_FMRI
 	if [ $? -eq 0 ] ; then
 	    result=$SMF_EXIT_OK

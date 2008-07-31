@@ -67,7 +67,11 @@ The properties each instance needs are:
 			determine which filesystems to snapshot -
 			property inheritance is not respected.
 
- zfs/interval		[ hours | days | months ]	
+ zfs/interval		[ hours | days | months | none]	
+			When set to none, we don't take automatic snapshots, but
+			leave an SMF instance available for users to manually
+			fire the method script whenever they want - useful for
+			snapshotting on system events.
 
  zfs/keep		How many snapshots to retain. "all" keeps all snapshots.
 
