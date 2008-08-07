@@ -47,7 +47,7 @@ daily		snapshots every day, keeping 31 snapshots
 weekly		snapshots every week, keeping 7 snapshots
 monthly		snapshots every month, keeping 12 snapshots
 
-The default service instance does not need to be enabled.
+The :default service instance does not need to be enabled.
 
 Additional instances of the service can also be created, for example to group
 related sets of filesystems under a single service instance.
@@ -55,17 +55,25 @@ related sets of filesystems under a single service instance.
 The properties each instance needs are:
 
  zfs/fs-name		The name of the filesystem. If the special filesystem
-			name "//" is used, then the system snapshots all
+			name "//" is used, then the system snapshots only
 			filesystems with the zfs user property 
 			"com.sun:auto-snapshot:<label>" set to true, so to take
 			frequent snapshots of tank/timf, run the following zfs
 			command:
 
 			# zfs set com.sun:auto-snapshot:frequent=true tank/timf
-			When the "snap-children" property is set to true,
-			only locally-set filesystem properties are used	to
+
+			When the "snap-children" property is set to "true",
+			only locally-set dataset properties are used to
 			determine which filesystems to snapshot -
-			property inheritance is not respected.
+			property inheritance is not respected in this case,
+			but yeilds better performance for large dataset trees.
+
+			The special filesystem name "##" is the reverse of the
+			above - it snapshots all filesystems, except ones that are
+			explicitly marked with a "com.sun:auto-snapshot:<label>"
+			set to "false".  Using this zfs/fs-name value implicitly
+			turns off the "snap-children" flag.
 
  zfs/interval		[ hours | days | months | none]	
 			When set to none, we don't take automatic snapshots, but
@@ -73,9 +81,15 @@ The properties each instance needs are:
 			fire the method script whenever they want - useful for
 			snapshotting on system events.
 
- zfs/keep		How many snapshots to retain. "all" keeps all snapshots.
+ zfs/keep		How many snapshots to retain - eg. setting this to "4"
+			would keep only the four most recent snapshots. When each
+			new snapshot is taken, the oldest is destroyed. If a snapshot
+			has been cloned, the service will drop to maintenance mode
+			when attempting to destroy that snapshot.  Setting to "all"
+			keeps all snapshots.
 
- zfs/period		How often you want to take snapshots
+ zfs/period		How often you want to take snapshots, in intervals
+			set according to "zfs/interval"
 			 (eg. every 10 days)
 
  zfs/snapshot-children	"true" if you would like to recursively take snapshots
@@ -90,7 +104,13 @@ The properties each instance needs are:
 			a backup is running.
 
  zfs/label		A label that can be used to differentiate this set of
-			backups from others, not required.
+			snapshots from others, not required. If multiple 
+			schedules are running on the same machine, using distinct
+			labels for each schedule is needed - otherwise one
+			schedule could remove snapshots taken by another schedule
+			according to it's snapshot-retention policy.
+			(see "zfs/keep")
+			
 
  zfs/verbose		Set to false by default, setting to true makes the
 			service produce more output about what it's doing.

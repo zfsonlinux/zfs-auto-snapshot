@@ -112,7 +112,7 @@ done
 function schedule_snapshots {
 
 	typeset FMRI=$1
-	zfs_smf_props $1
+	zfs_smf_props $FMRI 
 	# FIXME need work in here to actually validate the FMRI props
 	typeset FILESYS="$fs_name"
 	typeset INTERVAL="$interval"
@@ -143,6 +143,7 @@ function schedule_snapshots {
 
 	# remove anything that's there at the moment
 	unschedule_snapshots $FMRI		
+	check_missed_snapshots $INTERVAL $PERIOD $FMRI
 
 	add_cron_job $INTERVAL $PERIOD $OFFSET $FMRI
 	
@@ -282,6 +283,86 @@ function unschedule_snapshots {
 }
 
 
+# This function is intended to be called on service start. It checks to see
+# if the last snapshot was taken more than <frequency> <intervals> ago,
+# and if that's the case, takes a snapshot immediatedly.
+function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI
+	set -x
+
+	typeset INTERVAL=$1
+	typeset PERIOD=$2
+	typeset FMRI=$3
+	typeset FILESYS=$fs_name
+	typeset LABEL=$label
+
+	case "$FILESYS" in
+	"//")
+		FILESYS=$(get_snapshot_datasets $LABEL $SNAP_CHILDREN)	
+		;;
+	"##")
+		FILESYS=$(get_nonexcluded_datasets $LABEL)
+		;;
+	esac
+
+	
+	if [ "$LABEL" != "\"\"" ] ; then
+		LABEL="${SEP}${LABEL}"
+	else
+		LABEL=""
+	fi
+
+	# check to see if there are any filesystems
+	if [ -z "$FILESYS" ] ; then
+		return 0
+	fi
+
+	# only interested in the first filesystem, assuming they
+	# all have a similar creation date.
+	set -A fs $FILESYS
+	LAST_SNAPSHOT=$(zfs list -H -o name -r -t snapshot ${fs[0]} \
+		| grep "${fs[0]}@${PREFIX}${LABEL}" | tail -1)
+
+	# if we've never taken a snapshot, do nothing
+	if [ -z "$LAST_SNAPSHOT" ] ; then
+		return 0
+	fi
+
+	LAST_SNAP_TIME=$(zfs get -H -p -o value creation $LAST_SNAPSHOT)
+	LAST_SNAP_TIME_HUMAN=$(zfs get -H -o value creation $LAST_SNAPSHOT)
+	NOW=$(perl -e 'print time;')
+
+	# slightly incorrect time accounting here, but good enough.
+	MINUTE_S=60
+	HOUR_S=$(( $MINUTE_S * 60 ))
+	DAY_S=$(( $HOUR_S * 24 ))
+	MONTH_S=$(( $DAY_S * 30 ))
+	
+	case $INTERVAL in
+	"minutes")
+		MULTIPLIER=$MINUTE_S
+	;;
+	"hours")
+		MULTIPLIER=$HOUR_S
+	;;
+	"days")
+		MULTIPLIER=$DAY_S
+	;;
+	"none")
+		return 0
+	;;
+	"*")
+		print_log "WARNING - unknown interval encountered in check_missed_snapshots!"
+		return 1
+	esac
+	PERIOD_S=$(( $MULTIPLIER * $PERIOD ))
+	AGO=$(( $NOW - $LAST_SNAP_TIME ))
+	if [ $AGO -gt $PERIOD_S ] ; then
+		print_log "Last snapshot for $FMRI taken on $LAST_SNAP_TIME_HUMAN"
+		print_log "which was greater than the $PERIOD $INTERVAL schedule. Taking snapshot now."
+		take_snapshot $FMRI
+	fi
+}
+
 # This function actually takes the snapshot of the filesystem.
 # $1 is assumed to be a valid FMRI
 function take_snapshot {
@@ -291,7 +372,7 @@ function take_snapshot {
 
 	export LOG=$log
 	typeset DATE=$(date +%F-%H${SEP}%M${SEP}%S)
-	typeset FILESYS=$fs_name
+	typeset FILESYS="$fs_name"
 	typeset KEEP=$keep
 	typeset SNAP_CHILDREN=$snapshot_children
 
@@ -312,12 +393,24 @@ function take_snapshot {
 	# user property which specifies which datasets should be snapshotted
 	# and under which "label" - a set of default service instances that
 	# snapshot at defined periods (daily, weekly, monthly, every 15 mins)
-	if [ "$FILESYS" == "//" ] ; then
-	    FILESYS=$(get_snapshot_datasets $LABEL $SNAP_CHILDREN)
-	else
-	    FILESYS=$FILESYS
-	fi
 
+	# the "##" filesystem is also special. It takes snapshots of
+	# all datasets (non-recursively) *except* those marked with the tag
+	# "com.sun:auto-snapshot:${LABEL}" = false. We necessarily ignore
+	# the SNAP_CHILDREN setting in this case, as that could result in
+	# us inadvertently taking snapshots of a child dataset under the
+	# parent's lack of "com.sun:auto-snapshot:${LABEL}" = false tag.
+	
+	case "$FILESYS" in
+	"//")
+		FILESYS=$(get_snapshot_datasets $LABEL $SNAP_CHILDREN)
+		;;
+	"##")
+		FILESYS=$(get_nonexcluded_datasets $LABEL)
+		SNAP_CHILDREN=false
+		;;
+	esac	
+		
 	if [ "$LABEL" != "\"\"" ] ; then
 	    LABEL="${SEP}${LABEL}"
 	else
@@ -617,15 +710,28 @@ function get_snapshot_datasets { #LABEL #SNAP_CHILDREN
 	typeset LABEL=$1
 	typeset SNAP_CHILDREN=$2
 	if [ "${SNAP_CHILDREN}" = "true" ] ; then
-	    typeset FS=$(zfs get com.sun:auto-snapshot:$LABEL \
-	        | grep local | grep true | awk '{print $1}')
+	    typeset FS=$(zfs get -s local -o name,value com.sun:auto-snapshot:$LABEL \
+	        | grep true$ | awk '{print $1}')
 	else
 	    typeset FS=$(zfs list -t filesystem,volume \
 		-o name,com.sun:auto-snapshot:$LABEL \
-	        | grep true | awk '{print $1}')
+	        | grep true$ | awk '{print $1}')
 	fi
 	echo "$FS"
 }
+
+# Get a list of filesystems we should snapshot. We look for all filesystems
+# and volumes that don't have a property com.sun:auto-snapshot:$LABEL
+# set to false.
+function get_nonexcluded_datasets {
+
+	typeset LABEL=$1
+	typeset FS=$(zfs list -H -t filesystem,volume \
+	    -o name,com.sun:auto-snapshot:$LABEL \
+	    | grep -v false$ | awk '{print $1}')
+	echo "$FS"
+}
+
 
 
 # Determine if a pool is currently being scrubbed or resilvered.
@@ -671,7 +777,7 @@ function is_scrubbing { # POOL SCRUBLIST
 # consult to in order to actually take the snapshot.
 
 if [ -n "${SMF_FMRI}" ] ; then
-	zfs_smf_props $SMF_FRI
+	zfs_smf_props $SMF_FMRI
 	export LOG=${log}
 fi
 
