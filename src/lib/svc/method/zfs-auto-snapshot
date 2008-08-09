@@ -135,11 +135,17 @@ function schedule_snapshots {
 	# for now, we're forcing the offset to be 0 seconds.
 	typeset OFFSET=0
 
-	if [ "$FILESYS" != "//" ] ; then
-	    # validate the filesystem
-	    zfs list $FILESYS 2>&1 1> /dev/null
-	    check_failure $? "ZFS filesystem does not exist!"
-	fi
+	case $FILESYS in
+	"//")
+		;;
+	"##" )
+		;;
+	*)
+		# validate the filesystem
+		zfs list $FILESYS 2>&1 > /dev/null
+		check_failure $? "ZFS filesystem does not exist!"
+		;;
+	esac
 
 	# remove anything that's there at the moment
 	unschedule_snapshots $FMRI		
