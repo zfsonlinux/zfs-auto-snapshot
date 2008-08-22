@@ -2,24 +2,26 @@ i pkginfo
 i copyright
 i postinstall
 i preremove
+i i.manifest
+i r.manifest
+d none lib 0755 root bin 
+d none lib/svc 0755 root bin 
+d none lib/svc/method 0755 root bin 
+f none lib/svc/method/zfs-auto-snapshot 0755 root bin 
 d none var 0755 root sys	
 d none var/svc 0755 root sys
 d none var/svc/manifest 0755 root sys
 d none var/svc/manifest/system 0755 root sys
 d none var/svc/manifest/system/filesystem 0755 root sys
-f none var/svc/manifest/system/filesystem/zfs-auto-snapshot.xml 0644 root sys
-f none var/svc/manifest/system/filesystem/auto-snapshot-monthly.xml 0644 root sys	
-f none var/svc/manifest/system/filesystem/auto-snapshot-frequent.xml 0644 root sys
-f none var/svc/manifest/system/filesystem/auto-snapshot-daily.xml 0644 root sys
-f none var/svc/manifest/system/filesystem/auto-snapshot-hourly.xml 0644 root sys
-f none var/svc/manifest/system/filesystem/auto-snapshot-weekly.xml 0644 root sys
+f manifest var/svc/manifest/system/filesystem/zfs-auto-snapshot.xml 0644 root sys
+f manifest var/svc/manifest/system/filesystem/auto-snapshot-monthly.xml 0644 root sys	
+f manifest var/svc/manifest/system/filesystem/auto-snapshot-frequent.xml 0644 root sys
+f manifest var/svc/manifest/system/filesystem/auto-snapshot-daily.xml 0644 root sys
+f manifest var/svc/manifest/system/filesystem/auto-snapshot-hourly.xml 0644 root sys
+f manifest var/svc/manifest/system/filesystem/auto-snapshot-weekly.xml 0644 root sys
 d none usr 0755 root sys
 d none usr/share 0755 root sys
 d none usr/share/applications 0755 root other
 f none usr/share/applications/automatic-snapshot.desktop 0644 root bin
 d none usr/bin 0755 root bin
 f none usr/bin/zfs-auto-snapshot-admin.sh 0755 root sys
-d none lib 0755 root bin
-d none lib/svc 0755 root bin
-d none lib/svc/method 0755 root bin
-f none lib/svc/method/zfs-auto-snapshot 0755 root bin

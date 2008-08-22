@@ -63,7 +63,7 @@ and keeps 4 of these snapshots into the past.
 		   override="true"/>
 
 	  <propval name="avoidscrub" type="boolean" value="true"
-		   override="true"/>
+		   override="false"/>
 
 	</property_group>
 

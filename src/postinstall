@@ -27,22 +27,4 @@
 
 # a postinstall script - it should import the manifests
 # and enable the service
-DEFAULT=svc:/system/filesystem/zfs/auto-snapshot:default
-
-FMRIS="svc:/system/filesystem/zfs/auto-snapshot:frequent svc:/system/filesystem/zfs/auto-snapshot:hourly svc:/system/filesystem/zfs/auto-snapshot:daily svc:/system/filesystem/zfs/auto-snapshot:weekly svc:/system/filesystem/zfs/auto-snapshot:monthly"
-
-FILES="auto-snapshot-daily.xml     auto-snapshot-monthly.xml auto-snapshot-frequent.xml  auto-snapshot-weekly.xml auto-snapshot-hourly.xml    zfs-auto-snapshot.xml"
-
-/usr/sbin/svccfg import /var/svc/manifest/system/filesystem/zfs-auto-snapshot.xml
-
-for manifest in $FILES
-do
-	echo Importing $manifest
-	/usr/sbin/svccfg import /var/svc/manifest/system/filesystem/$manifest
-done
-
-for fmri in $FMRIS
-do
-	echo Enabling $fmri
-	/usr/sbin/svcadm enable $fmri
-done
+echo "Post install script doing nathing!"

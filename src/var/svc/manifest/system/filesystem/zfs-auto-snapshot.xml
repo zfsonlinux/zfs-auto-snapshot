@@ -59,12 +59,29 @@
 <!-- the properties we expect that any instance will define
 they being :
 	fs-name : The name of the filesystem we want to snapshot.
+
 	The special filesystem name "//" indicates we should
-	look at the com.sun:auto-snapshot:<label> ZFS user
-	property on datasets, set to "true" if the dataset
+	look at the com.sun:auto-snapshot ZFS user
+	properties on datasets, set to "true" if the dataset
 	should have snapshots taken by this instance.
 
-	interval : minutes | hours | days | months
+	The special filesystem name "##" indicates we should
+	snapshot all filesystems on the machine, except those
+	marked with the com.sun:auto-snapshot ZFS user property
+	set to false. The snapshot-children setting is ignored when
+	using this fs-name value.
+
+	For both of the above, setting com.sun:auto-snapshot:<label>
+	will override the general setting for com.sun:auto-snapshot.
+	
+
+	interval : minutes | hours | days | months | none
+
+	For the interval "none" a cron job is not created for that
+	instance - instead the user can manually file the method
+	script to take snapshots defined by the rest of the properties
+	in the instance. The period and offset values are ignored in
+	this case.
 
 	period : How many (m,h,d,m) do we wait between snapshots
 
@@ -73,14 +90,14 @@ they being :
 	keep : How many snapshots we should keep, otherwise, we
 		delete the oldest when we hit this threshold
 
-       snapshot-children : Whether we should recursively snapshot
+        snapshot-children : Whether we should recursively snapshot
 		all filesystems contained within.
 
 	backup : If we want to perform a "zfs send" for our backup
 		we set this - either to "full" or "incremental".
 		If set to "none", we don't perform backups.
 
-         backup-save-cmd : A command string to save the backup - if unset,
+        backup-save-cmd : A command string to save the backup - if unset,
 		we return an error and move the service to
 		maintenance.
 
@@ -101,7 +118,7 @@ they being :
 		in the service printing more detail in the log
 		about what it's doing.
 
-	avoidscrub : Set to true by default, this determines whether
+	avoidscrub : Set to false by default, this determines whether
 		we should avoid taking snapshots on any pools that have
 		a scrub or resilver in progress.
 		More info in the bugid:
@@ -123,7 +140,7 @@ they being :
 
 	  <propval name="label" type="astring" value="" override="true"/>
 	  <propval name="verbose" type="boolean" value="false" override="true"/>
-	  <propval name="avoidscrub" type="boolean" value="true" override="true"/>
+	  <propval name="avoidscrub" type="boolean" value="false" override="true"/>
 
 	</property_group>
 

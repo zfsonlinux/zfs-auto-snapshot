@@ -65,7 +65,7 @@ SEP=":"
 
 # This variable gets set to the restarter/logfile property
 # whenever we have $FMRI defined. Used by the print_log and
-# print_note functions below for all output, it's definied
+# print_note functions below for all output, it's defined
 # by the schedule_snapshots take_snapshots and unschedule_snapshots
 # methods.
 LOG=""
@@ -90,7 +90,7 @@ function zfs_smf_props {
 
 IFS="
 "
-SMF_PROPS="$(svcprop -t -p zfs $1 |\
+SMF_PROPS="$(svcprop -t -p zfs -p restarter/logfile $1 |\
             sed -e 's#zfs/fs-name#zfs/fs_name#g' \
         -e 's#zfs/backup-lock#zfs/backup_lock#g' \
         -e 's#zfs/snapshot-children#zfs/snapshot_children#g' \
@@ -113,6 +113,9 @@ function schedule_snapshots {
 
 	typeset FMRI=$1
 	zfs_smf_props $FMRI 
+	# functions we call need $LOG set.
+	export LOG=$logfile
+
 	# FIXME need work in here to actually validate the FMRI props
 	typeset FILESYS="$fs_name"
 	typeset INTERVAL="$interval"
@@ -136,9 +139,7 @@ function schedule_snapshots {
 	typeset OFFSET=0
 
 	case $FILESYS in
-	"//")
-		;;
-	"##" )
+	'//' | '##')
 		;;
 	*)
 		# validate the filesystem
@@ -376,8 +377,8 @@ function take_snapshot {
 	FMRI=$1
 	zfs_smf_props $FMRI
 
-	export LOG=$log
-	typeset DATE=$(date +%F-%H${SEP}%M${SEP}%S)
+	export LOG=$logfile
+	typeset DATE=$(date +%F-%H${SEP}%M)
 	typeset FILESYS="$fs_name"
 	typeset KEEP=$keep
 	typeset SNAP_CHILDREN=$snapshot_children
@@ -532,7 +533,7 @@ function destroy_older_snapshots {
 	        print_note "$snapshot being destroyed ${RECURSIVE} as per \
  retention policy."
 	        zfs destroy ${RECURSIVE} $snapshot
-	        check_failure $? "Unable to destroy $snapshot"
+	        check_failure $? "Unable to destroy $snapshot" "NON_FATAL"
 	    else
 	        # don't destroy this one			
 	        COUNTER=$(($COUNTER - 1))
@@ -541,19 +542,24 @@ function destroy_older_snapshots {
 }
 
 # Given the exit status of a command, an integer, 0 if the command completed
-# without errors. If the command exited with errors, we degrade the
-# state of this service into maintenance mode. We also log an error message
-# as passed into this function.
+# without errors. If the command exited with errors we degrade the
+# state of this service into maintenance mode. If a 3rd argument is presented
+# we don't degrade the service. We also log an error message as passed into
+# this function.
 #
-function check_failure { # integer exit status, error message to display
+function check_failure { # integer exit status, error message to display, be fatal
 
 	typeset RESULT=$1
 	typeset ERR_MSG=$2
+	typeset NON_FATAL=$3
 
 	if [ $RESULT -ne 0 ] ; then
 	    print_log "Error: $ERR_MSG"
 	    print_log "Moving service $FMRI to maintenance mode."
-	    svcadm mark maintenance $FMRI
+	    if [ -z "${NON_FATAL}" ] ; then
+		print_log "Moving service $FMRI to maintenance mode."
+	        svcadm mark maintenance $FMRI
+	    fi
 	fi
 
 }
@@ -716,26 +722,56 @@ function get_snapshot_datasets { #LABEL #SNAP_CHILDREN
 	typeset LABEL=$1
 	typeset SNAP_CHILDREN=$2
 	if [ "${SNAP_CHILDREN}" = "true" ] ; then
-	    typeset FS=$(zfs get -s local -o name,value com.sun:auto-snapshot:$LABEL \
-	        | grep true$ | awk '{print $1}')
+		# FIXME this doesn't cope with the case where a dataset is
+		# set locally to differing values - value for :LABEL needs to override
+		typeset FS=$(zfs get -H -s local \
+		-o name,value com.sun:auto-snapshot,com.sun:auto-snapshot:$LABEL \
+		| grep -v 'false$' | egrep ' true '\|'true$' | awk '{print $1}' | sort)
+		FS="$(narrow_recursive_filesystems $FS)"
 	else
-	    typeset FS=$(zfs list -t filesystem,volume \
-		-o name,com.sun:auto-snapshot:$LABEL \
-	        | grep true$ | awk '{print $1}')
+		typeset FS=$(zfs list -t filesystem,volume \
+		-o name,com.sun:auto-snapshot,com.sun:auto-snapshot:$LABEL \
+		| grep -v 'false$' | egrep ' true '\|'true$' | awk '{print $1}')
 	fi
 	echo "$FS"
 }
 
 # Get a list of filesystems we should snapshot. We look for all filesystems
 # and volumes that don't have a property com.sun:auto-snapshot:$LABEL
-# set to false.
+# or com.sun:auto-snapshot set to false. The :$LABEL specifier overrides
+# the more general property setting.
 function get_nonexcluded_datasets {
 
 	typeset LABEL=$1
 	typeset FS=$(zfs list -H -t filesystem,volume \
-	    -o name,com.sun:auto-snapshot:$LABEL \
-	    | grep -v false$ | awk '{print $1}')
+	    -o name,com.sun:auto-snapshot,com.sun:auto-snapshot:$LABEL \
+	    | egrep -v '	false	-$'\|'false$' | awk '{print $1}')
 	echo "$FS"
+}
+
+# Given a sorted list of filesystems, determine whether any of the
+# listed filesystems are redundant
+# eg. for tank/other tank/foo tank/other/bar tank/foo/bar
+# we only need to snapshot tank/other and tank/foo
+function narrow_recursive_filesystems {
+	# for each filesystem in the list, get each of it's ancestors
+	# if any of the ancestors is already in the list, don't add it,
+	# otherwise, do.
+	typeset LIST=""
+	for ds in $@ ; do
+		ANCESTOR_IN_LIST=""
+		ancestor=$(dirname $ds)
+		while [ $ancestor != "." ] ; do
+			if echo $LIST | fgrep $ancestor// > /dev/null ; then
+				ANCESTOR_IN_LIST=true
+			fi
+			ancestor=$(dirname $ancestor)
+		done
+		if [ -z "${ANCESTOR_IN_LIST}" ] ; then
+			LIST="${LIST} ${ds}//"
+		fi
+	done
+	echo ${LIST} | sed -e 's#//##g'
 }
 
 
@@ -745,7 +781,7 @@ function get_nonexcluded_datasets {
 
 # The 2nd arg is a cache of pools known to be not scrubbing during this
 # invocation of the script. This does risk a scrub starting mid-way through
-# the script being started and us not checking for it - but if that's just
+# the script and us not checking for it - but if that's just
 # happened, then restarting the scrub as a result of a snapshot being taken
 # won't be too expensive.
 function is_scrubbing { # POOL SCRUBLIST
@@ -770,6 +806,33 @@ function is_scrubbing { # POOL SCRUBLIST
 	fi
 }
 
+# This function runs on startup - by default, if we're taking snapshots 
+# under a // schedule, and there isn't a property set on the pool
+# com.sun:auto-snapshot=false, then we set the property to true, causing
+# all datasets on the system to get included by the service. 
+function auto_include {
+	FS_NAME=$fs_name
+	LABEL=$label
+	if [ "$FS_NAME" == "//" ] ; then
+		POOLS=$(zpool list -H -o name)
+		for pool in $POOLS ; do
+			if ! zpool status -x $pool | grep "state: UNAVAIL" > /dev/null ; then
+				SNAPALL=$(zfs get com.sun:auto-snapshot $pool)
+				SNAPLABEL=$(zfs get com.sun:auto-snapshot:$LABEL $pool)
+				SNAP=$SNAPALL$SNAPLABEL
+				case $SNAP in
+				*true | true*)
+					;;
+				*false | false*)
+					;;
+				*)
+					zfs set com.sun:auto-snapshot=true $pool
+					;;
+				esac
+			fi
+		done	
+	fi
+}
 
 
 
@@ -784,12 +847,13 @@ function is_scrubbing { # POOL SCRUBLIST
 
 if [ -n "${SMF_FMRI}" ] ; then
 	zfs_smf_props $SMF_FMRI
-	export LOG=${log}
+	export LOG=$logfile
 fi
 
-# $1 start | stop | an FMRI that we want to take snapshots of.
+# $1 start | stop | refresh | an FMRI that we want to take snapshots of.
 case "$1" in
 'start')
+	auto_include $SMF_FMRI
 	schedule_snapshots $SMF_FMRI
 	if [ $? -eq 0 ] ; then
 	    result=$SMF_EXIT_OK
@@ -808,7 +872,6 @@ case "$1" in
 	    result=$SMF_EXIT_ERR_FATAL
 	fi
         ;;
-
 # the default case, we actually call from the cron job itself that's
 # executing this script, and do the job of taking snapshots.
 *)

@@ -62,6 +62,9 @@ snapshots into the past.
 	  <propval name="verbose" type="boolean" value="false"
 		   override="true"/>
 
+	  <propval name="avoidscrub" type="boolean" value="false"
+		   override="false"/>
+
 	</property_group>
 
 	</instance>

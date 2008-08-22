@@ -27,14 +27,4 @@
 
 # a postinstall script - it should disable the services
 # and delete the instances
-DEFAULT=svc:/system/filesystem/zfs/auto-snapshot:default
-
-FMRIS="svc:/system/filesystem/zfs/auto-snapshot:frequent svc:/system/filesystem/zfs/auto-snapshot:hourly svc:/system/filesystem/zfs/auto-snapshot:daily svc:/system/filesystem/zfs/auto-snapshot:weekly svc:/system/filesystem/zfs/auto-snapshot:monthly"
-
-for fmri in $FMRIS $DEFAULT ; do
-	STATE=$(/usr/bin/svcs -H -o state $fmri)
-	if [ "$STATE" = "online" ] ; then
-	    /usr/sbin/svcadm disable -s $fmri
-	fi
-	/usr/sbin/svccfg delete $fmri
-done
+echo preremove script doing nothing
