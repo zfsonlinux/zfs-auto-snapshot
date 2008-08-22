@@ -25,6 +25,58 @@
 # Use is subject to license terms.
 #
 
-# a postinstall script - it should import the manifests
-# and enable the service
-echo "Post install script doing nathing!"
+# a postinstall script - adds zfssnap role.
+# Return 0 if a user exists, 1 otherwise.
+#
+
+# Check if the first argument is 0, settting our return
+# variable to an error otherwise
+#
+function check_error {
+	RETURN_CODE=$1
+	ERROR="$2"
+        if [ "$RETURN_CODE" -ne 0 ] ; then
+                echo "ERROR: $ERROR"
+        fi
+}
+
+function user_exists {
+        typeset USER=$1
+        if /usr/bin/grep ^$USER: $BASEDIR/etc/passwd > /dev/null ; then
+                return 0
+        else
+                return 1
+        fi
+}
+
+function auth_exists {
+	typeset AUTH=$1
+	if /usr/bin/grep ^$AUTH: $BASEDIR/etc/security/auth_attr > /dev/null ; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+# add our authorization
+if ! auth_exists solaris.smf.manage.zfs-auto-snapshot; then
+	echo "solaris.smf.manage.zfs-auto-snapshot:::Manage the ZFS Automatic Snapshot Service::" \
+	>> /etc/security/auth_attr
+fi
+
+# add the zfssnap role - probably only works on a local system :-(
+if ! user_exists zfssnap; then
+	/usr/sbin/roleadd -d /export/home/zfssnap -c "ZFS Automatic Snapshots role" \
+	-P "ZFS File System Management" \
+	-A solaris.smf.manage.zfs-auto-snapshot -m zfssnap
+	check_error $? "Unable to create zfssnap role!"
+	/usr/bin/passwd -r files -N zfssnap
+	check_error $? "Unable to make zfssnap a no-password account"
+
+	# make sure their path has /usr/sbin in it
+	echo "PATH=/usr/sbin:\${PATH}" >> /export/home/zfssnap/.profile
+	echo "export PATH" >> /export/home/zfssnap/.profile
+else
+	echo "zfssnap role already exists."
+fi
+

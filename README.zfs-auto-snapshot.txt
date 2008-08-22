@@ -27,7 +27,7 @@ GUI is documented as part of the installation instructions below.
 INSTALLATION
 
 To install, as root, pkgadd TIMFauto-snapshot. This package now contains
-several canned SMF instances which are enabled by default. These are:
+several canned SMF instances. These are:
 
 online          1:17:43 svc:/system/filesystem/zfs/auto-snapshot:hourly
 online          1:17:46 svc:/system/filesystem/zfs/auto-snapshot:monthly
@@ -149,10 +149,13 @@ you can now import the manifest for this instance, using the command :
 then issue the command :
   # svcadm enable svc:/system/filesystem/zfs/auto-snapshot:tank-root_filesystem
 
-You can see what work will be done by checking your crontab. As of version
-0.7, all logging from the service is done from the method script using
-the print_log function, which uses logger(1) to send message to syslogd(1M)
-at priority level "daemon.notice".
+
+The service is run by a restricted role "zfssnap", which is created when installing
+the service. It has the "ZFS File System Administration" RBAC Profile, as well
+as the solaris.smf.manage.zfs-auto-snapshot Authorization. In order to see what
+the service is doing, you can view the SMF log files in /var/svc/log for each
+service instance and syslog, with more detailed logging output being sent to
+the log files in the zfssnap role's home directory. (/export/home/zfssnap, by default)
 
 
 SEE ALSO

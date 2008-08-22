@@ -56,6 +56,14 @@
 		<propval name='duration' type='astring' value='transient' />
 	</property_group>
 
+        <property_group name='general' type='framework'>
+            <propval name='action_authorization' type='astring'
+                value='solaris.smf.manage.zfs-auto-snapshot' />
+            <propval name='value_authorization' type='astring'
+                value='solaris.smf.manage.zfs-auto-snapshot' />
+        </property_group>
+
+
 <!-- the properties we expect that any instance will define
 they being :
 	fs-name : The name of the filesystem we want to snapshot.
@@ -159,16 +167,24 @@ they being :
 		 sec. timeout.
 
         <exec_method
-		type='method'
-		name='start'
-		exec='/home/timf/zfs-auto-snapshot %m'
-		timeout_seconds='0' />
+                type='method'
+                name='start'
+                exec='/lib/svc/method/zfs-auto-snapshot start'
+                timeout_seconds='0'>
+                        <method_context>
+                                <method_credential user='zfssnap' group='staff' />
+                        </method_context>
+        </exec_method>
 
-	<exec_method
-		type='method'
-		name='stop'
-		exec='/home/timf/zfs-auto-snapshot %m'
-		timeout_seconds='0' />
+        <exec_method
+                type='method'
+                name='stop'
+                exec='/lib/svc/method/zfs-auto-snapshot stop'
+                timeout_seconds='0' >
+                        <method_context>
+                                <method_credential user='zfssnap' group='staff' />
+                        </method_context>
+        </exec_method>
 
         <property_group name='startd' type='framework'>
         	<propval name='duration' type='astring' value='transient' />
@@ -192,7 +208,7 @@ they being :
 
 	  <propval name="verbose" type="boolean" value="false" override="true"/>
 
-	  <propval name="avoidscrub" type="boolean" value="true" override="true"/>
+	  <propval name="avoidscrub" type="boolean" value="false" override="true"/>
 
 	</property_group>
 

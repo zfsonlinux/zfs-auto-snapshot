@@ -1,0 +1,81 @@
+0.11
+
+* Add RBAC support 
+  - the service now runs under a zfssnap role
+  - service start/stop logs stay under /var/svc/log
+  - other logs saved to /export/home/zfssnap (and syslog)
+* Add a 'zfs/interval' property value 'none' which doesn't use cron
+* Add a 'zfs/fs-name' property value '##'
+* Add a cache of svcprops to the method script
+* Add a com.sun:auto-snapshot user property, com.sun:auto-snapshot:$LABEL
+  takes precedence
+* Remove the seconds field of the snapshot name - we don't really need it
+* Make recursive snapshots the default for bundled '//' manifests
+* Changed the way // works with recursive snapshots
+  (look for local props only when using -r)
+* Set avoidscrub to false by default (bug was fixed in in nv_94)
+* Bugfix from Dan - Volumes are datasets too
+* Automatically snapshot everything by setting com.sun:auto-snapshot=true
+  on startup. (this gets done on all root pools - existing properties set
+  to false will override this)
+* Check for missed snapshots on startup
+* Clean up shell style
+* Clean up preremove script
+* Write this Changelog
+
+0.10
+
+* Bugfix from Reid Spencer - Tim can't spell "RECURSIVE" (hah, I can now!:-) 
+* Bugfix from Breandan Dezendorf - Labelled snapshots not being destroyed correctly
+* Ability to avoid taking snapshots when pool scrubs are in progress
+
+0.9
+
+* SVR4 packaging (with ugly postinstall/preremove scripts)
+* Add some canned instances for frequent,daily,hourly,weekly,monthly snapshots
+* Add 'zfs/fs-name' '//' property value
+* Change the timeout for the start/stop methods to infinity
+* Allow power users to avoid having ':' in snapshot names via $SEP
+* Add GUI utilities and some basic GNOME integration
+
+0.8
+
+* Bugfix from Dick Davies - fencepost error in crontab entries
+* Add locking around crontab updates
+* Add zfs/verbose feature for more logging if you really need it
+
+0.7
+
+* Bugfix from Bill Sommerfeld - make less logging noise
+* Add logging to syslog
+
+0.6
+
+* Option to take backups using zfs send after snapshots are taken
+* Allow us to have multiple schedules per filesystem (add labels)
+* Better fault handling - drop SMF instance to 'maintenance' if stuff goes wrong
+
+0.5
+
+* Bugfix from Joe Little - recursive snapshots weren't respecting retention limits 
+
+0.4
+
+* Make zenity gui work on s10u2
+* Clean up the logic that the gui uses to name different instances
+
+0.3
+
+* Add snapshot retention limits
+
+0.2
+
+* Fix the gui to show a different string when changing the interval
+* Fix a bug where seperate instances were removing each other's cron jobs
+
+0.1 
+
+* Take periodic snapshots using cron and SMF
+* Snapshot children
+* Add zenity gui to create SMF manifests
+

@@ -52,6 +52,7 @@
 
 result=$SMF_EXIT_OK
 
+export PATH=/usr/sbin:/usr/bin:${PATH}
 
 # A prefix we use on all snapshot created by this script.
 # See the definition of $SNAPNAME in the take_snapshot()
@@ -76,6 +77,9 @@ LOG=""
 # a null string in this variable says we don't.
 HAS_RECURSIVE=$(zfs snapshot 2>&1 | fgrep -e '-r')
 
+# OpenSolaris has no pfksh, so for now, we need to pfexec
+# all calls to zfs that require privileges
+PFZFS="pfexec zfs"
 
 function get_pair {
         NAME=$1
@@ -95,7 +99,7 @@ SMF_PROPS="$(svcprop -t -p zfs -p restarter/logfile $1 |\
         -e 's#zfs/backup-lock#zfs/backup_lock#g' \
         -e 's#zfs/snapshot-children#zfs/snapshot_children#g' \
         -e 's#zfs/backup-save-cmd#zfs/backup_save_cmd#g' \
-        -e 's#zfs/##g' -e 's/$/,/g')"
+        -e 's#zfs/##g' -e 's#restarter/##g' -e 's/$/,/g')"
 IFS=,
 for line in $SMF_PROPS ; do
         IFS=' 	
@@ -377,7 +381,13 @@ function take_snapshot {
 	FMRI=$1
 	zfs_smf_props $FMRI
 
-	export LOG=$logfile
+	# When taking snapshots, because we're running as a role
+	# and can't redirect our output through SMF, we don't have
+	# permissions to log to /var/svc/log, so we instead log
+	# to the role's home directory.
+	LOG_BASE=$(basename $logfile)
+	export LOG="$HOME/$LOG_BASE"
+
 	typeset DATE=$(date +%F-%H${SEP}%M)
 	typeset FILESYS="$fs_name"
 	typeset KEEP=$keep
@@ -466,20 +476,20 @@ function take_snapshot {
 	   	    for child in $(zfs list -r -H -o name -t filesystem,volume $fs) ; do
 		        destroy_older_snapshots $child $KEEP $LABEL
 		        print_note "Taking snapshot $child@$SNAPNAME"
-		        zfs snapshot $child@$SNAPNAME
+		        $PFZFS snapshot $child@$SNAPNAME
 			check_failure $? "Unable to take snapshot $child@$SNAPNAME."
 		    done
 		else
 		    destroy_older_snapshots $fs $KEEP $LABEL $HAS_RECURSIVE
 	            print_note "Taking recursive snapshot $fs@$SNAPNAME"
-	            zfs snapshot -r $fs@$SNAPNAME
+	            $PFZFS snapshot -r $fs@$SNAPNAME
 		    check_failure $? "Unable to take recursive snapshots of $fs@$SNAPNAME."
 	        fi
 	
 	    else
 	         destroy_older_snapshots $fs $KEEP $LABEL
 		 print_note "Taking snapshot $fs@$SNAPNAME"
-		 zfs snapshot $fs@$SNAPNAME
+		 $PFZFS snapshot $fs@$SNAPNAME
 		 check_failure $? "Unable to take snapshot $fs@$SNAPNAME."
 	    fi
 
@@ -532,7 +542,7 @@ function destroy_older_snapshots {
 	        # using print_note, as this checks our $VERBOSE flag
 	        print_note "$snapshot being destroyed ${RECURSIVE} as per \
  retention policy."
-	        zfs destroy ${RECURSIVE} $snapshot
+	        $PFZFS destroy ${RECURSIVE} $snapshot
 	        check_failure $? "Unable to destroy $snapshot" "NON_FATAL"
 	    else
 	        # don't destroy this one			
@@ -697,12 +707,12 @@ function take_backup { # filesystem backup-type label fmri
        case $BACKUP in
 	"incremental")
 	    print_note "Starting incr. ZFS send of differences between $PREV_SNAP and $LAST_SNAP."
-	    zfs send -i $PREV_SNAP $LAST_SNAP | $BACKUP_SAVE_CMD
+	    $PFZFS send -i $PREV_SNAP $LAST_SNAP | $BACKUP_SAVE_CMD
 	    check_failure $? "Error performing incremental backup of $dataset."
 	;;
 	"full")
 	    print_note "Starting ZFS send of $LAST_SNAP."
-	    zfs send $LAST_SNAP | $BACKUP_SAVE_CMD
+	    $PFZFS send $LAST_SNAP | $BACKUP_SAVE_CMD
 	    check_failure $? "Error performing full backup of $dataset."
 	;;
        esac
@@ -826,7 +836,7 @@ function auto_include {
 				*false | false*)
 					;;
 				*)
-					zfs set com.sun:auto-snapshot=true $pool
+					$PFZFS set com.sun:auto-snapshot=true $pool
 					;;
 				esac
 			fi
