@@ -63,17 +63,10 @@ The properties each instance needs are:
 
 			# zfs set com.sun:auto-snapshot:frequent=true tank/timf
 
-			When the "snap-children" property is set to "true",
-			only locally-set dataset properties are used to
-			determine which filesystems to snapshot -
-			property inheritance is not respected in this case,
-			but yeilds better performance for large dataset trees.
-
-			The special filesystem name "##" is the reverse of the
-			above - it snapshots all filesystems, except ones that are
-			explicitly marked with a "com.sun:auto-snapshot:<label>"
-			set to "false".  Using this zfs/fs-name value implicitly
-			turns off the "snap-children" flag.
+			The "snap-children" property is ignored when using this
+			fs-name value. Instead, the system automatically determines
+			when it's able to take recursive, vs. non-recursive snapshots
+			of the system, based on the values of the ZFS user properties.
 
  zfs/interval		[ hours | days | months | none]	
 			When set to none, we don't take automatic snapshots, but
@@ -93,7 +86,8 @@ The properties each instance needs are:
 			 (eg. every 10 days)
 
  zfs/snapshot-children	"true" if you would like to recursively take snapshots
-			 of all child filesystems of the specified fs-name.
+			of all child filesystems of the specified fs-name.
+			This value is ignored when setting zfs/fs-name='//'
 
  zfs/backup		[ full | incremental | none ] 
 

@@ -5,19 +5,18 @@
   - service start/stop logs stay under /var/svc/log
   - other logs saved to /export/home/zfssnap (and syslog)
 * Add a 'zfs/interval' property value 'none' which doesn't use cron
-* Add a 'zfs/fs-name' property value '##'
 * Add a cache of svcprops to the method script
-* Add a com.sun:auto-snapshot user property, com.sun:auto-snapshot:$LABEL
-  takes precedence
-* Remove the seconds field of the snapshot name - we don't really need it
-* Make recursive snapshots the default for bundled '//' manifests
-* Changed the way // works with recursive snapshots
-  (look for local props only when using -r)
+* Add a com.sun:auto-snapshot user property used by all instances,
+  com.sun:auto-snapshot:$LABEL takes precedence
+* Remove the seconds field of the snapshot name - it's not needed
+* Changed the way // works with recursive snapshots - ignore
+  snapshot-children, and instead automatically determine when we can take
+  recursive snapshots based on which datasets have the zfs user properties
 * Set avoidscrub to false by default (bug was fixed in in nv_94)
 * Bugfix from Dan - Volumes are datasets too
 * Automatically snapshot everything by setting com.sun:auto-snapshot=true
-  on startup. (this gets done on all root pools - existing properties set
-  to false will override this)
+  on startup. (this gets done on all top level datasets - an existing 
+  property set to false on the top level dataset overrides this)
 * Check for missed snapshots on startup
 * Clean up shell style
 * Clean up preremove script

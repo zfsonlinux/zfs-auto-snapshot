@@ -68,7 +68,10 @@ SEP=":"
 # whenever we have $FMRI defined. Used by the print_log and
 # print_note functions below for all output, it's defined
 # by the schedule_snapshots take_snapshots and unschedule_snapshots
-# methods.
+# methods. Note that for take_snapshot LOG gets set to
+# a file in the zfssnap role's home directory, as we don't own
+# the SMF log. Start/stop logging goes to retarter/logfile,
+# everything else goes in the zfssnap role's log.
 LOG=""
 
 
@@ -143,7 +146,7 @@ function schedule_snapshots {
 	typeset OFFSET=0
 
 	case $FILESYS in
-	'//' | '##')
+	'//')
 		;;
 	*)
 		# validate the filesystem
@@ -297,7 +300,7 @@ function unschedule_snapshots {
 # This function is intended to be called on service start. It checks to see
 # if the last snapshot was taken more than <frequency> <intervals> ago,
 # and if that's the case, takes a snapshot immediatedly.
-function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI
+function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI <repopulate cache>
 	set -x
 
 	typeset INTERVAL=$1
@@ -306,12 +309,27 @@ function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI
 	typeset FILESYS=$fs_name
 	typeset LABEL=$label
 
+	if [ -n $4 ] ; then
+		typeset NO_CACHE_REPOPULATE=$4
+	fi
+
+	# // is special, in that we take snapshots based on user properties
+	# so here, we get those properties, and call ourselves again, with
+	# those values.
 	case "$FILESYS" in
 	"//")
-		FILESYS=$(get_snapshot_datasets $LABEL $SNAP_CHILDREN)	
-		;;
-	"##")
-		FILESYS=$(get_nonexcluded_datasets $LABEL)
+		get_userprop_datasets	
+		export snapshot_children=false
+		export fs_name="$SINGLE_LIST"
+		print_note "Checking for non-recursive missed // snapshots $SINGLE_LIST"
+		check_missed_snapshots $INTERVAL $PERIOD $FMRI no_repopulate_cache
+
+		export snapshot_children=true
+		export fs_name="$RECURSIVE_LIST"
+		print_note "Checking for recursive missed // snapshots $RECURSIVE_LIST"
+		check_missed_snapshots $INTERVAL $PERIOD $FMRI no_repopulate_cache
+			
+		return 0
 		;;
 	esac
 
@@ -370,16 +388,22 @@ function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI
 	if [ $AGO -gt $PERIOD_S ] ; then
 		print_log "Last snapshot for $FMRI taken on $LAST_SNAP_TIME_HUMAN"
 		print_log "which was greater than the $PERIOD $INTERVAL schedule. Taking snapshot now."
-		take_snapshot $FMRI
+		take_snapshot $FMRI $NO_CACHE_REPOPULATE
 	fi
 }
 
 # This function actually takes the snapshot of the filesystem.
-# $1 is assumed to be a valid FMRI
+# $1 is assumed to be a valid FMRI. $2 if non-null makes us skip
+# populating the SMF property cache - used only by the special
+# // snapshot type.
 function take_snapshot {
 	# want this to be global, used by check_failure
 	FMRI=$1
-	zfs_smf_props $FMRI
+	NO_CACHE_REPOPULATE=$2
+
+	if [ -z "$NO_CACHE_REPOPULATE" ] ; then
+		zfs_smf_props $FMRI
+	fi
 
 	# When taking snapshots, because we're running as a role
 	# and can't redirect our output through SMF, we don't have
@@ -410,22 +434,25 @@ function take_snapshot {
 	# user property which specifies which datasets should be snapshotted
 	# and under which "label" - a set of default service instances that
 	# snapshot at defined periods (daily, weekly, monthly, every 15 mins)
-
-	# the "##" filesystem is also special. It takes snapshots of
-	# all datasets (non-recursively) *except* those marked with the tag
-	# "com.sun:auto-snapshot:${LABEL}" = false. We necessarily ignore
-	# the SNAP_CHILDREN setting in this case, as that could result in
-	# us inadvertently taking snapshots of a child dataset under the
-	# parent's lack of "com.sun:auto-snapshot:${LABEL}" = false tag.
-	
+	# Determine what these are, call ourselves again, then return.
 	case "$FILESYS" in
 	"//")
-		FILESYS=$(get_snapshot_datasets $LABEL $SNAP_CHILDREN)
-		;;
-	"##")
-		FILESYS=$(get_nonexcluded_datasets $LABEL)
-		SNAP_CHILDREN=false
-		;;
+		# this populates two values SINGLE_LIST and RECURSIVE_LIST
+		get_userprop_datasets $LABEL
+
+		print_note "Taking non-recursive snapshots $SINGLE_LIST"
+		export snapshot_children=false
+		export fs_name="$SINGLE_LIST"
+		take_snapshots $FMRI no_propcache_repopulate
+		single_STATE=$?
+
+		print_note "Taking recursive snapshots of $RECURSIVE_LIST"
+		export snapshot_childrent=false
+		export fs_name="$RECURSIVE_LIST"
+		take_snapshots $FMRI no_propcache_repopulate
+		recursive_STATE=$?
+		return $single_STATE && $recursive_STATE
+	;;
 	esac	
 		
 	if [ "$LABEL" != "\"\"" ] ; then
@@ -724,40 +751,6 @@ function take_backup { # filesystem backup-type label fmri
 
 }
 
-# Get a list of filesystem we should snapshot. If snap_children is "true"
-# then we don't list children that inherit the parent's property - we just look
-# for locally set properties, and let "zfs snapshot -r" snapshot the children.
-function get_snapshot_datasets { #LABEL #SNAP_CHILDREN
-
-	typeset LABEL=$1
-	typeset SNAP_CHILDREN=$2
-	if [ "${SNAP_CHILDREN}" = "true" ] ; then
-		# FIXME this doesn't cope with the case where a dataset is
-		# set locally to differing values - value for :LABEL needs to override
-		typeset FS=$(zfs get -H -s local \
-		-o name,value com.sun:auto-snapshot,com.sun:auto-snapshot:$LABEL \
-		| grep -v 'false$' | egrep ' true '\|'true$' | awk '{print $1}' | sort)
-		FS="$(narrow_recursive_filesystems $FS)"
-	else
-		typeset FS=$(zfs list -t filesystem,volume \
-		-o name,com.sun:auto-snapshot,com.sun:auto-snapshot:$LABEL \
-		| grep -v 'false$' | egrep ' true '\|'true$' | awk '{print $1}')
-	fi
-	echo "$FS"
-}
-
-# Get a list of filesystems we should snapshot. We look for all filesystems
-# and volumes that don't have a property com.sun:auto-snapshot:$LABEL
-# or com.sun:auto-snapshot set to false. The :$LABEL specifier overrides
-# the more general property setting.
-function get_nonexcluded_datasets {
-
-	typeset LABEL=$1
-	typeset FS=$(zfs list -H -t filesystem,volume \
-	    -o name,com.sun:auto-snapshot,com.sun:auto-snapshot:$LABEL \
-	    | egrep -v '	false	-$'\|'false$' | awk '{print $1}')
-	echo "$FS"
-}
 
 # Given a sorted list of filesystems, determine whether any of the
 # listed filesystems are redundant
@@ -784,7 +777,66 @@ function narrow_recursive_filesystems {
 	echo ${LIST} | sed -e 's#//##g'
 }
 
+function can_recursive_snapshot {
+        typeset ds=$1
+        if egrep "$ds/"\|"$ds   " $EXCLUDE > /dev/null; then
+                # we can't recursively snapshot $ds because
+                # it's excluded or is in the path to an excluded dataset
+                return 1
+        else
+                return 0
+        fi
+}
 
+function is_excluded {
+        typeset ds=$1
+        if egrep "$ds   " $EXCLUDE > /dev/null ; then
+                return 0
+        else
+                return 1
+        fi
+}
+
+# This builds two lists of datasets - RECURSIVE_LIST and SINGLE_LIST
+# based on the value of ZFS user properties com.sun:auto-snapshot and
+# com.sun:auto-snapshot:${LABEL}, the first argument to this script.
+# RECURSIVE_LIST is a list of datasets that can be snapshotted with -r
+# SINGLE_LIST is a list of datasets to snapshot individually.
+#
+function get_userprop_datasets {
+
+	typeset LABEL=$1
+	typeset ALL=/tmp/zfs-auto-snapshot-list.$$
+	typeset EXCLUDE=/tmp/zfs-auto-snapshot-exclude.$$
+
+  	zfs list -H -t filesystem,volume -o \
+	name,com.sun:auto-snapshot,com.sun:auto-snapshot:${LABEL} > $ALL
+	cat $ALL | egrep -e "false$"\|"false	-$" > $EXCLUDE
+
+	# iterating through datasets
+	for ds in $(cat $ALL | cut -f1 | sort -u) ; do
+        	if can_recursive_snapshot $ds ; then
+                	print_note "OK to recursive snapshot $ds"
+                	RECURSIVE_LIST="${RECURSIVE_LIST} $ds"
+        	else
+                	if ! is_excluded $ds ; then
+                        	print_note "OK to snapshot sole dataset $ds"
+                        	SINGLE_LIST="${SINGLE_LIST} $ds"
+                	else
+                        	print_note "$ds will not be snapshotted"
+                	fi
+        	fi
+	done
+
+	FINAL_RECURSIVE_LIST=$(narrow_recursive_filesystems $RECURSIVE_LIST)
+	print_note "Narrowed list of datasets to recursively snapshot is"
+	print_note "$FINAL_RECURSIVE_LIST"
+	export RECURSIVE_LIST="$FINAL_RECURSIVE_LIST"
+	export SINGLE_LIST
+
+	rm $ALL
+	rm $EXCLUDE
+}
 
 # Determine if a pool is currently being scrubbed or resilvered.
 # Return 0 if it is scrubbing/resilvering, 1 otherwise.

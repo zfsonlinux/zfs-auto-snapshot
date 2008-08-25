@@ -72,15 +72,17 @@ they being :
 	look at the com.sun:auto-snapshot ZFS user
 	properties on datasets, set to "true" if the dataset
 	should have snapshots taken by this instance.
+	
+	If set to false or unset, snapshots will not be taken
+	by this instance.
+	
+	The snapshot-children property is ignored when using
+	this setting, instead the system will automatically
+	determine how to take snapshots, based on which datasets
+	have true, false or unset property values.
 
-	The special filesystem name "##" indicates we should
-	snapshot all filesystems on the machine, except those
-	marked with the com.sun:auto-snapshot ZFS user property
-	set to false. The snapshot-children setting is ignored when
-	using this fs-name value.
-
-	For both of the above, setting com.sun:auto-snapshot:<label>
-	will override the general setting for com.sun:auto-snapshot.
+	Setting com.sun:auto-snapshot:<label> will override 
+	the general setting for com.sun:auto-snapshot.
 	
 
 	interval : minutes | hours | days | months | none
@@ -99,7 +101,8 @@ they being :
 		delete the oldest when we hit this threshold
 
         snapshot-children : Whether we should recursively snapshot
-		all filesystems contained within.
+		all filesystems contained within. Ignored when
+		using the "//" fs-name value.
 
 	backup : If we want to perform a "zfs send" for our backup
 		we set this - either to "full" or "incremental".
