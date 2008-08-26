@@ -443,13 +443,13 @@ function take_snapshot {
 		print_note "Taking non-recursive snapshots $SINGLE_LIST"
 		export snapshot_children=false
 		export fs_name="$SINGLE_LIST"
-		take_snapshots $FMRI no_propcache_repopulate
+		take_snapshot $FMRI no_propcache_repopulate
 		single_STATE=$?
 
 		print_note "Taking recursive snapshots of $RECURSIVE_LIST"
 		export snapshot_childrent=false
 		export fs_name="$RECURSIVE_LIST"
-		take_snapshots $FMRI no_propcache_repopulate
+		take_snapshot $FMRI no_propcache_repopulate
 		recursive_STATE=$?
 		return $single_STATE && $recursive_STATE
 	;;
@@ -806,8 +806,8 @@ function is_excluded {
 function get_userprop_datasets {
 
 	typeset LABEL=$1
-	typeset ALL=/tmp/zfs-auto-snapshot-list.$$
-	typeset EXCLUDE=/tmp/zfs-auto-snapshot-exclude.$$
+	export ALL=/tmp/zfs-auto-snapshot-list.$$
+	export EXCLUDE=/tmp/zfs-auto-snapshot-exclude.$$
 
   	zfs list -H -t filesystem,volume -o \
 	name,com.sun:auto-snapshot,com.sun:auto-snapshot:${LABEL} > $ALL
