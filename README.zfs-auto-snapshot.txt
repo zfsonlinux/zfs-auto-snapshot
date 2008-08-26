@@ -1,7 +1,7 @@
 
 NAME 
 
-ZFS Automatic Snapshot SMF Service, version 0.11
+ZFS Automatic Snapshot SMF Service, version 0.11 Early Access
 
 
 DESCRIPTION 
