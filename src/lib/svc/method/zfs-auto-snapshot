@@ -779,7 +779,7 @@ function narrow_recursive_filesystems {
 
 function can_recursive_snapshot {
         typeset ds=$1
-        if egrep "$ds/"\|"$ds   " $EXCLUDE > /dev/null; then
+        if egrep "$ds/"\|"$ds	" $EXCLUDE > /dev/null; then
                 # we can't recursively snapshot $ds because
                 # it's excluded or is in the path to an excluded dataset
                 return 1
@@ -790,7 +790,7 @@ function can_recursive_snapshot {
 
 function is_excluded {
         typeset ds=$1
-        if egrep "$ds   " $EXCLUDE > /dev/null ; then
+        if egrep "$ds	" $EXCLUDE > /dev/null ; then
                 return 0
         else
                 return 1
@@ -879,8 +879,8 @@ function auto_include {
 		POOLS=$(zpool list -H -o name)
 		for pool in $POOLS ; do
 			if ! zpool status -x $pool | grep "state: UNAVAIL" > /dev/null ; then
-				SNAPALL=$(zfs get com.sun:auto-snapshot $pool)
-				SNAPLABEL=$(zfs get com.sun:auto-snapshot:$LABEL $pool)
+				SNAPALL=$(zfs get -H -o value com.sun:auto-snapshot $pool)
+				SNAPLABEL=$(zfs get -H -o value com.sun:auto-snapshot:$LABEL $pool)
 				SNAP=$SNAPALL$SNAPLABEL
 				case $SNAP in
 				*true | true*)
