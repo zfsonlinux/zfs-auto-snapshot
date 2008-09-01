@@ -447,7 +447,7 @@ function take_snapshot {
 		single_STATE=$?
 
 		print_note "Taking recursive snapshots of $RECURSIVE_LIST"
-		export snapshot_childrent=false
+		export snapshot_children=true
 		export fs_name="$RECURSIVE_LIST"
 		take_snapshot $FMRI no_propcache_repopulate
 		recursive_STATE=$?

@@ -34,13 +34,14 @@
 	type='service'
 	version='0.11'>
 
-	<!-- no point in being able to take snapshots if we don't have a fs -->
+	<!-- we need to be multi-user to ensure the homedirs for the
+	zfssnap role is mounted -->
 	<dependency
-		name='fs-local'
+		name='multi-user'
 		grouping='require_all'
 		restart_on='none'
 		type='service'>
-		<service_fmri value='svc:/system/filesystem/local' />
+		<service_fmri value='svc:/milestone/multi-user' />
 	</dependency>
 	
 	<!-- we also need cron -->
