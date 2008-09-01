@@ -475,8 +475,9 @@ function take_snapshot {
 	# also the risk that a running scrub will complete just after this
 	# check. Life's hard.
 	if [ "$AVOIDSCRUB" == "true" ] ; then
-	    # a cache of the pools that are known not to be scrubbing
+	    # lists of pools and datasets that are known not to be scrubbing
 	    NOSCRUBLIST=""
+	    NOSCRUBFILESYS=""
 
 	    # Create a list of filesystems scheduled for snapshots
 	    # that are *not* on pools that are being scrubbed/resilvered
