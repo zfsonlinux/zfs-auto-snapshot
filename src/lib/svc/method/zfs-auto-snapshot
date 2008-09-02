@@ -301,7 +301,6 @@ function unschedule_snapshots {
 # if the last snapshot was taken more than <frequency> <intervals> ago,
 # and if that's the case, takes a snapshot immediatedly.
 function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI <repopulate cache>
-	set -x
 
 	typeset INTERVAL=$1
 	typeset PERIOD=$2
@@ -351,13 +350,19 @@ function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI <repopulate cache>
 	LAST_SNAPSHOT=$(zfs list -H -o name -r -t snapshot ${fs[0]} \
 		| grep "${fs[0]}@${PREFIX}${LABEL}" | tail -1)
 
-	# if we've never taken a snapshot, do nothing
+	# if we've never taken a snapshot, then we probably should
+	# arrange to have one taken now. Fake the LAST_SNAP_TIME variable
 	if [ -z "$LAST_SNAPSHOT" ] ; then
-		return 0
+		LAST_SNAP_TIME=0
+		LAST_SNAP_TIME_HUMAN="[ no snapshot taken yet ]"
 	fi
 
-	LAST_SNAP_TIME=$(zfs get -H -p -o value creation $LAST_SNAPSHOT)
-	LAST_SNAP_TIME_HUMAN=$(zfs get -H -o value creation $LAST_SNAPSHOT)
+
+	# if we have taken a snapshot, find out when it was
+	if [ -n "$LAST_SNAPSHOT" ] ; then
+		LAST_SNAP_TIME=$(zfs get -H -p -o value creation $LAST_SNAPSHOT)
+		LAST_SNAP_TIME_HUMAN=$(zfs get -H -o value creation $LAST_SNAPSHOT)
+	fi
 	NOW=$(perl -e 'print time;')
 
 	# slightly incorrect time accounting here, but good enough.
