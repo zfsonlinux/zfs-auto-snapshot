@@ -120,8 +120,6 @@ function schedule_snapshots {
 
 	typeset FMRI=$1
 	zfs_smf_props $FMRI 
-	# functions we call need $LOG set.
-	export LOG=$logfile
 
 	# FIXME need work in here to actually validate the FMRI props
 	typeset FILESYS="$fs_name"
@@ -320,12 +318,12 @@ function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI <repopulate cache>
 		get_userprop_datasets	
 		export snapshot_children=false
 		export fs_name="$SINGLE_LIST"
-		print_note "Checking for non-recursive missed // snapshots $SINGLE_LIST"
+		echo "Checking for non-recursive missed // snapshots $SINGLE_LIST"
 		check_missed_snapshots $INTERVAL $PERIOD $FMRI no_repopulate_cache
 
 		export snapshot_children=true
 		export fs_name="$RECURSIVE_LIST"
-		print_note "Checking for recursive missed // snapshots $RECURSIVE_LIST"
+		echo "Checking for recursive missed // snapshots $RECURSIVE_LIST"
 		check_missed_snapshots $INTERVAL $PERIOD $FMRI no_repopulate_cache
 			
 		return 0
@@ -409,13 +407,6 @@ function take_snapshot {
 	if [ -z "$NO_CACHE_REPOPULATE" ] ; then
 		zfs_smf_props $FMRI
 	fi
-
-	# When taking snapshots, because we're running as a role
-	# and can't redirect our output through SMF, we don't have
-	# permissions to log to /var/svc/log, so we instead log
-	# to the role's home directory.
-	LOG_BASE=$(basename $logfile)
-	export LOG="$HOME/$LOG_BASE"
 
 	typeset DATE=$(date +%F-%H${SEP}%M)
 	typeset FILESYS="$fs_name"
@@ -609,21 +600,24 @@ function check_failure { # integer exit status, error message to display, be fat
 
 
 # A function we use to emit output. Right now, this goes to syslog via logger(1)
-# but it would be much nicer to be able to print it to the svc log file for
-# each individual service instance - tricky because we're being called from
-# cron, most of the time and are detached from smf. Working around this by
-# appending to the $LOG file
+# as well as being appended to a log file specified by $LOG. If this logfile
+# variable doesn't exist, we simply echo the message to stdout, which will
+# make it's way to the final log destination via SMF, since we'll always have
+# $LOG defined when being called from cron otherwise.
 function print_log { # message to display
 	logger -t zfs-auto-snap -p daemon.notice $*
-	echo $(date) $* >> $LOG
+	if [ -z "$LOG" ] ; then
+		echo $*
+	else
+		echo $(date) $* >> $LOG
+	fi
 }
 
 # Another function to emit output, this time checking to see if the
 # user has set the service into verbose mode, otherwise, we print nothing
 function print_note { # mesage to display
 	if [ "$VERBOSE" == "true" ] ; then
-	    logger -t zfs-auto-snap -p daemon.notice $*
-	    echo $(date) $* >> $LOG
+		print_log $*
 	fi
 }
 
@@ -913,9 +907,11 @@ function auto_include {
 # created above, where the argument is the FMRI containing properties we can
 # consult to in order to actually take the snapshot.
 
+
+# When called via SMF, several variables are set for us - SMF_FMRI being one
+# we check for the existance of that
 if [ -n "${SMF_FMRI}" ] ; then
 	zfs_smf_props $SMF_FMRI
-	export LOG=$logfile
 fi
 
 # $1 start | stop | refresh | an FMRI that we want to take snapshots of.
@@ -948,6 +944,10 @@ case "$1" in
 
 	case $SMF_FMRI in
 		svc:/*)
+			zfs_smf_props $SMF_FMRI
+			LOG_BASE=$(basename $logfile)
+			export LOG="$HOME/$LOG_BASE"
+
 			take_snapshot $SMF_FMRI
 			if [ $? -eq 0 ] ; then
 			    result=$SMF_EXIT_OK
