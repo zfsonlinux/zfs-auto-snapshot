@@ -19,9 +19,3 @@ f manifest var/svc/manifest/system/filesystem/auto-snapshot-frequent.xml 0644 ro
 f manifest var/svc/manifest/system/filesystem/auto-snapshot-daily.xml 0644 root sys
 f manifest var/svc/manifest/system/filesystem/auto-snapshot-hourly.xml 0644 root sys
 f manifest var/svc/manifest/system/filesystem/auto-snapshot-weekly.xml 0644 root sys
-d none usr 0755 root sys
-d none usr/share 0755 root sys
-d none usr/share/applications 0755 root other
-f none usr/share/applications/automatic-snapshot.desktop 0644 root bin
-d none usr/bin 0755 root bin
-f none usr/bin/zfs-auto-snapshot-admin.sh 0755 root sys

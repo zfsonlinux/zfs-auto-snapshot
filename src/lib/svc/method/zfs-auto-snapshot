@@ -64,14 +64,9 @@ PREFIX="zfs-auto-snap"
 # clients can get confused by colons. Who knew?
 SEP=":"
 
-# This variable gets set to the restarter/logfile property
-# whenever we have $FMRI defined. Used by the print_log and
-# print_note functions below for all output, it's defined
-# by the schedule_snapshots take_snapshots and unschedule_snapshots
-# methods. Note that for take_snapshot LOG gets set to
-# a file in the zfssnap role's home directory, as we don't own
-# the SMF log. Start/stop logging goes to retarter/logfile,
-# everything else goes in the zfssnap role's log.
+# A string we use to determine whether to echo log messages
+# to stdout (and get picked up by SMF) or remain silent
+# and use logger(1) to log to syslog instead.
 LOG=""
 
 
@@ -600,24 +595,21 @@ function check_failure { # integer exit status, error message to display, be fat
 
 
 # A function we use to emit output. Right now, this goes to syslog via logger(1)
-# as well as being appended to a log file specified by $LOG. If this logfile
-# variable doesn't exist, we simply echo the message to stdout, which will
-# make it's way to the final log destination via SMF, since we'll always have
-# $LOG defined when being called from cron otherwise.
+# as well as being echoed to stdout which will result in it being picked up by
+# SMF.
 function print_log { # message to display
 	logger -t zfs-auto-snap -p daemon.notice $*
 	if [ -z "$LOG" ] ; then
 		echo $*
-	else
-		echo $(date) $* >> $LOG
 	fi
 }
 
 # Another function to emit output, this time checking to see if the
 # user has set the service into verbose mode, otherwise, we print nothing
+# This goes to stdout, and will get collected by either SMF or cron
 function print_note { # mesage to display
 	if [ "$VERBOSE" == "true" ] ; then
-		print_log $*
+		echo $(date "+%b %d %T") $*
 	fi
 }
 
@@ -945,8 +937,7 @@ case "$1" in
 	case $SMF_FMRI in
 		svc:/*)
 			zfs_smf_props $SMF_FMRI
-			LOG_BASE=$(basename $logfile)
-			export LOG="$HOME/$LOG_BASE"
+			export LOG="false"
 
 			take_snapshot $SMF_FMRI
 			if [ $? -eq 0 ] ; then

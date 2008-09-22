@@ -3,7 +3,7 @@
 * Add RBAC support 
   - the service now runs under a zfssnap role
   - service start/stop logs stay under /var/svc/log
-  - other logs saved to /export/home/zfssnap (and syslog)
+  - other log messages sent to syslog
 * Add a 'zfs/interval' property value 'none' which doesn't use cron
 * Add a cache of svcprops to the method script
 * Add a com.sun:auto-snapshot user property used by all instances,
