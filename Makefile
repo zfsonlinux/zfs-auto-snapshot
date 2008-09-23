@@ -1,8 +1,19 @@
+DIR = \
+	`basename ${PWD}`
+
 pkg: clean
 	mkdir -p proto
-	cat `pwd`/src/pkginfo.s | sed -e s/~PSTAMP~/`uname -n``date +%Y%m%d%H%M%S`/g > `pwd`/src/pkginfo
-	pkgmk -f `pwd`/src/prototype -d `pwd`/proto -r `pwd`/src
+	cat src/pkginfo.s | sed -e s/~PSTAMP~/`uname -n``date +%Y%m%d%H%M%S`/g > src/pkginfo
+	pkgmk -f src/prototype -d proto -r src
 
 clean:
 	rm -rf proto/*
-	rmdir proto
+	if [ -d proto ] ; then \
+		rmdir proto ; \
+	fi
+
+dist:
+	hg revert --all
+	tar cf ${DIR}.tar -C .. ${DIR}/Changelog -C .. ${DIR}/Makefile \
+	-C .. ${DIR}/README.zfs-auto-snapshot.txt -C .. ${DIR}/src
+	gzip ${DIR}.tar
