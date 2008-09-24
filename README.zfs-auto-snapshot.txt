@@ -109,7 +109,7 @@ The properties each instance needs are:
  zfs/verbose		Set to false by default, setting to true makes the
 			service produce more output about what it's doing.
 
- zfs/avoidscrub		Set to true by default, this determines whether
+ zfs/avoidscrub		Set to false by default, this determines whether
 			we should avoid taking snapshots on any pools that have
 			a scrub or resilver in progress.
 			More info in the bugid:

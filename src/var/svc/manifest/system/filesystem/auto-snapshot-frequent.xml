@@ -23,7 +23,7 @@ com.sun:auto-snapshot:frequent=true every
                 exec='/lib/svc/method/zfs-auto-snapshot start'
                 timeout_seconds='0'>
                         <method_context>
-                                <method_credential user='zfssnap' group='staff' />
+                                <method_credential user='zfssnap' group='daemon' />
                         </method_context>
         </exec_method>
 
@@ -33,7 +33,7 @@ com.sun:auto-snapshot:frequent=true every
                 exec='/lib/svc/method/zfs-auto-snapshot stop'
                 timeout_seconds='0' >
                         <method_context>
-                                <method_credential user='zfssnap' group='staff' />
+                                <method_credential user='zfssnap' group='daemon' />
                         </method_context>
         </exec_method>
 

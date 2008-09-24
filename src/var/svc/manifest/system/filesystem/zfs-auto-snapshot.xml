@@ -27,7 +27,7 @@
 
 -->
 
-<service_bundle type='manifest' name='TIMFzfssnap:filesystem-zfs-auto-snapshot'>
+<service_bundle type='manifest' name='SUNWzfs-auto-snapshot:filesystem-zfs-auto-snapshot'>
 
 <service
 	name='system/filesystem/zfs/auto-snapshot'
@@ -180,7 +180,7 @@ they being :
                 exec='/lib/svc/method/zfs-auto-snapshot start'
                 timeout_seconds='0'>
                         <method_context>
-                                <method_credential user='zfssnap' group='staff' />
+                                <method_credential user='zfssnap' group='daemon' />
                         </method_context>
         </exec_method>
 
@@ -190,7 +190,7 @@ they being :
                 exec='/lib/svc/method/zfs-auto-snapshot stop'
                 timeout_seconds='0' >
                         <method_context>
-                                <method_credential user='zfssnap' group='staff' />
+                                <method_credential user='zfssnap' group='daemon' />
                         </method_context>
         </exec_method>
 
@@ -250,7 +250,7 @@ On stopping the service, that cron job is removed.
 
 We also have the ability to perform backups, done using the "zfs send" command.  A property set in the service called "backup-save-cmd" can be configured as the command used to save the backup stream. See the zfs(1M) man page for an example.  The backups can be either "full" backups, or "incremental" backups - for each incremental backup, a full backup must be configured first. If for some reason an incremental backup fails, a full backup is performed instead.
 
-By default, snapshots will not be taken of any datasets resident on pools that are currently being scrubbed or resilvered. This can behaviour can be changed using the zfs/avoid scrub service property.
+By default, snapshots will be taken of any datasets resident on pools that are currently being scrubbed or resilvered. This can behaviour can be changed using the zfs/avoid scrub service property.
 
 Care should be taken when configuring backups to ensure that the time granularity of the cron job is sufficient to allow the backup to complete between invocations of each backup. We perform locking to ensure that two backups of the same filesystem cannot run simultaneously, but will move the service into "maintenance" state should this occur.
 			</loctext>
