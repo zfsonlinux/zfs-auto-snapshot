@@ -27,7 +27,7 @@
 
 -->
 
-<service_bundle type='manifest' name='SUNWzfs-auto-snapshot:filesystem-zfs-auto-snapshot'>
+<service_bundle type='manifest' name='SUNWzfs-auto-snapshot:filesystem-auto-snapshot'>
 
 <service
 	name='system/filesystem/zfs/auto-snapshot'
@@ -52,6 +52,26 @@
 		type="service">
 		<service_fmri value="svc:/system/cron" />
 	</dependency>
+
+        <exec_method
+                type='method'
+                name='start'
+                exec='/lib/svc/method/zfs-auto-snapshot start'
+                timeout_seconds='0'>
+                        <method_context>
+                                <method_credential user='zfssnap' group='daemon' />
+                        </method_context>
+        </exec_method>
+
+        <exec_method
+                type='method'
+                name='stop'
+                exec='/lib/svc/method/zfs-auto-snapshot stop'
+                timeout_seconds='0' >
+                        <method_context>
+                                <method_credential user='zfssnap' group='daemon' />
+                        </method_context>
+        </exec_method>
 
 	<property_group name='startd' type='framework'>
 		<propval name='duration' type='astring' value='transient' />
@@ -173,30 +193,6 @@ they being :
 		 start and stop, running these serially - if there are
 		 sufficiently high numbers of instances, we can trip, say a 10
 		 sec. timeout.
-
-        <exec_method
-                type='method'
-                name='start'
-                exec='/lib/svc/method/zfs-auto-snapshot start'
-                timeout_seconds='0'>
-                        <method_context>
-                                <method_credential user='zfssnap' group='daemon' />
-                        </method_context>
-        </exec_method>
-
-        <exec_method
-                type='method'
-                name='stop'
-                exec='/lib/svc/method/zfs-auto-snapshot stop'
-                timeout_seconds='0' >
-                        <method_context>
-                                <method_credential user='zfssnap' group='daemon' />
-                        </method_context>
-        </exec_method>
-
-        <property_group name='startd' type='framework'>
-        	<propval name='duration' type='astring' value='transient' />
-        </property_group>
 
 	<property_group name="zfs" type="application">
 

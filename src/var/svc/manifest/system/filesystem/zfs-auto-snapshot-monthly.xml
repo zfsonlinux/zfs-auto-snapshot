@@ -17,30 +17,6 @@ and keeps 12 of these snapshots into the past.
 
 	<instance name='monthly' enabled='false' >
 
-        <exec_method
-                type='method'
-                name='start'
-                exec='/lib/svc/method/zfs-auto-snapshot start'
-                timeout_seconds='0'>
-                        <method_context>
-                                <method_credential user='zfssnap' group='daemon' />
-                        </method_context>
-        </exec_method>
-
-        <exec_method
-                type='method'
-                name='stop'
-                exec='/lib/svc/method/zfs-auto-snapshot stop'
-                timeout_seconds='0' >
-                        <method_context>
-                                <method_credential user='zfssnap' group='daemon' />
-                        </method_context>
-        </exec_method>
-
-        <property_group name='startd' type='framework'>
-        	<propval name='duration' type='astring' value='transient' />
-        </property_group>
-
         <!-- properties for zfs automatic snapshots -->
 	<property_group name="zfs" type="application">
 

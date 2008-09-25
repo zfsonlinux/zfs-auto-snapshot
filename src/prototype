@@ -13,9 +13,13 @@ d none var/svc 0755 root sys
 d none var/svc/manifest 0755 root sys
 d none var/svc/manifest/system 0755 root sys
 d none var/svc/manifest/system/filesystem 0755 root sys
-f manifest var/svc/manifest/system/filesystem/zfs-auto-snapshot.xml 0644 root sys
-f manifest var/svc/manifest/system/filesystem/auto-snapshot-monthly.xml 0644 root sys	
-f manifest var/svc/manifest/system/filesystem/auto-snapshot-frequent.xml 0644 root sys
-f manifest var/svc/manifest/system/filesystem/auto-snapshot-daily.xml 0644 root sys
-f manifest var/svc/manifest/system/filesystem/auto-snapshot-hourly.xml 0644 root sys
-f manifest var/svc/manifest/system/filesystem/auto-snapshot-weekly.xml 0644 root sys
+# The order here is important: the auto-snapshot.xml manifest
+# must be imported before the instance manifests, otherwise
+# dependency information isn't set in the instances until
+# they get refreshed.
+f manifest var/svc/manifest/system/filesystem/auto-snapshot.xml 0644 root sys
+f manifest var/svc/manifest/system/filesystem/zfs-auto-snapshot-monthly.xml 0644 root sys	
+f manifest var/svc/manifest/system/filesystem/zfs-auto-snapshot-frequent.xml 0644 root sys
+f manifest var/svc/manifest/system/filesystem/zfs-auto-snapshot-daily.xml 0644 root sys
+f manifest var/svc/manifest/system/filesystem/zfs-auto-snapshot-hourly.xml 0644 root sys
+f manifest var/svc/manifest/system/filesystem/zfs-auto-snapshot-weekly.xml 0644 root sys

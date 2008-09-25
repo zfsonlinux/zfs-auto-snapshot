@@ -12,18 +12,6 @@
 
 	<instance name='space-archive' enabled='false' >
 
-        <exec_method
-		type='method'
-		name='start'
-		exec='/lib/svc/method/zfs-auto-snapshot start'
-		timeout_seconds='0' />
-
-	<exec_method
-		type='method'
-		name='stop'
-		exec='/lib/svc/method/zfs-auto-snapshot stop'
-		timeout_seconds='0' />
-
         <property_group name='startd' type='framework'>
         	<propval name='duration' type='astring' value='transient' />
         </property_group>

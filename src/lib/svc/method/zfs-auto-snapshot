@@ -384,8 +384,8 @@ function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI <repopulate cache>
 	PERIOD_S=$(( $MULTIPLIER * $PERIOD ))
 	AGO=$(( $NOW - $LAST_SNAP_TIME ))
 	if [ $AGO -gt $PERIOD_S ] ; then
-		print_log "Last snapshot for $FMRI taken on $LAST_SNAP_TIME_HUMAN"
-		print_log "which was greater than the $PERIOD $INTERVAL schedule. Taking snapshot now."
+		echo "Last snapshot for $FMRI taken on $LAST_SNAP_TIME_HUMAN"
+		echo "which was greater than the $PERIOD $INTERVAL schedule. Taking snapshot now."
 		take_snapshot $FMRI $NO_CACHE_REPOPULATE
 	fi
 }
