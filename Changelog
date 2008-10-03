@@ -20,6 +20,8 @@
 * Check for missed snapshots on startup
 * Clean up shell style
 * Clean up preremove script
+* Remove the bundled GUI applications
+* Tag the method script with the current changeset during the build
 * Write this Changelog
 
 0.10

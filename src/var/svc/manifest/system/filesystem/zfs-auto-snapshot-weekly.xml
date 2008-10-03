@@ -17,6 +17,13 @@ and keeps 4 of these snapshots into the past.
 
 	<instance name='weekly' enabled='false' >
 
+	<property_group name='general' type='framework'>
+		<propval name='action_authorization' type='astring'
+		value='solaris.smf.manage.zfs-auto-snapshot' />
+		<propval name='value_authorization' type='astring'
+		value='solaris.smf.manage.zfs-auto-snapshot' />
+	</property_group>
+
         <!-- properties for zfs automatic snapshots -->
 	<property_group name="zfs" type="application">
 

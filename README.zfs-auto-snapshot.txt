@@ -1,7 +1,7 @@
 
 NAME 
 
-ZFS Automatic Snapshot SMF Service, version 0.11 Early Access
+ZFS Automatic Snapshot SMF Service, version 0.11
 
 
 DESCRIPTION 
@@ -13,16 +13,10 @@ incremental or full backups of those filesystems.
 Documentation for the service is contained in the manifest file,
 zfs-auto-snapshot.xml.
 
-As of version 0.9 there is a simple GUI that allows the user to configure
-which filesystems are to be included in the default canned SMF instances.
-This GUI is installed in the GNOME menu under:
-
-	Administration -> Automatic Snapshots
-
-We also bundle a simple GUI application, which will query the user for the
-properties required, and will then build an instance manifest. This
-GUI is documented as part of the installation instructions below.
-
+Version 0.11 removes the simple GUI applications that were used to
+create manifests, or select which filesystems should be included
+in the canned instances. These are superceded by the time-slider-setup
+application.
 
 INSTALLATION
 
@@ -119,37 +113,14 @@ The properties each instance needs are:
 
 An example instance manifest is included in this archive.
 
-The script "zfs-auto-snapshot-admin.sh" is a simple shell wrapper which uses
-zenity, a scriptable GUI framework in GNOME, to write a service manifest
-based on user input. 
-
-
-# ./zfs-auto-snapshot-admin.sh
-Usage: zfs-auto-snapshot-admin.sh [zfs filesystem name]
-
-
-EXAMPLES
-
-The following shows us running it for the ZFS filesystem 
-"tank/root_filesystem".
-
-timf@haiiro[593] ./zfs-auto-snapshot-admin.sh tank/root_filesystem
-[ a set of dialogs appear, asking for input ]
-Thanks, now assuming the default SMF manifest has already been imported,
-you can now import the manifest for this instance, using the command :
-
-  # svccfg import auto-snapshot-instance.xml
-
-then issue the command :
-  # svcadm enable svc:/system/filesystem/zfs/auto-snapshot:tank-root_filesystem
-
+SECURITY
 
 The service is run by a restricted role "zfssnap", which is created when installing
-the service. It has the "ZFS File System Administration" RBAC Profile, as well
-as the solaris.smf.manage.zfs-auto-snapshot Authorization. In order to see what
-the service is doing, you can view the SMF log files in /var/svc/log for each
-service instance and syslog, with more detailed logging output being sent to
-the log files in the zfssnap role's home directory. (/export/home/zfssnap, by default)
+the service if it doesn't already exist.  It has the "ZFS File System Administration"
+RBAC Profile, as well as the solaris.smf.manage.zfs-auto-snapshot Authorization.
+In order to see what the service is doing, you can view the SMF log files in
+/var/svc/log for each service instance and syslog, with more detailed logging output
+being sent to syslog when the "zfs/verbose" option is enabled.
 
 
 SEE ALSO

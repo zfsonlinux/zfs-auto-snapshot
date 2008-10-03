@@ -25,6 +25,8 @@
 # Use is subject to license terms.
 #
 
+# zfs-auto-snapshot changeset = ~ZFS_AUTO_SNAPSHOT_CHANGESET~
+
 
 #
 # This SMF method takes snapshots periodically of a zfs filesystem, with
@@ -909,6 +911,11 @@ fi
 # $1 start | stop | refresh | an FMRI that we want to take snapshots of.
 case "$1" in
 'start')
+	if [ "$SMF_FMRI" = "svc:/system/filesystem/zfs/auto-snapshot:default" ] ; then
+		print_log "The default service should not be enabled - use instances instead."
+		exit $SMF_EXIT_OK
+	fi
+
 	auto_include $SMF_FMRI
 	schedule_snapshots $SMF_FMRI
 	if [ $? -eq 0 ] ; then
@@ -920,6 +927,10 @@ case "$1" in
         ;;
 
 'stop')
+	if [ "$SMF_FMRI" = "svc:/system/filesystem/zfs/auto-snapshot:default" ] ; then
+		print_log "The default service should not be used - use instances instead."
+		exit $SMF_EXIT_OK
+	fi
 	unschedule_snapshots $SMF_FMRI
 	if [ $? -eq 0 ] ; then
 	    result=$SMF_EXIT_OK

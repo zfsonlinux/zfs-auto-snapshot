@@ -1,7 +1,6 @@
 i pkginfo
 i copyright
 i postinstall
-i preremove
 i i.manifest
 i r.manifest
 d none lib 0755 root bin 
