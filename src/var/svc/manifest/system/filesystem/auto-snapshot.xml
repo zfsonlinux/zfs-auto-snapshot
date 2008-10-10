@@ -34,8 +34,7 @@
 	type='service'
 	version='0.11'>
 
-	<!-- we need to be multi-user to ensure the homedirs for the
-	zfssnap role is mounted -->
+	<!-- we need to be multi-user  -->
 	<dependency
 		name='multi-user'
 		grouping='require_all'
@@ -94,8 +93,7 @@ they being :
 	properties on datasets, set to "true" if the dataset
 	should have snapshots taken by this instance.
 	
-	If set to false or unset, snapshots will not be taken
-	by this instance.
+	If unset, snapshots will not be taken by this instance.
 	
 	The snapshot-children property is ignored when using
 	this setting, instead the system will automatically
@@ -109,7 +107,7 @@ they being :
 	interval : minutes | hours | days | months | none
 
 	For the interval "none" a cron job is not created for that
-	instance - instead the user can manually file the method
+	instance - instead the user can manually fire the method
 	script to take snapshots defined by the rest of the properties
 	in the instance. The period and offset values are ignored in
 	this case.

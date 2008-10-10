@@ -27,15 +27,14 @@
 
 # zfs-auto-snapshot changeset = ~ZFS_AUTO_SNAPSHOT_CHANGESET~
 
-
-#
-# This SMF method takes snapshots periodically of a zfs filesystem, with
-# options to allow the user to keep a limited number of snapshots, or snapshot
-# all child datasets. More documentation available at
-# http://blogs.sun.com/timf
+# This SMF method takes periodic snapshots of zfs filesystems, with
+# options to allow the user to keep a limited number of snapshots, snapshot
+# all child datasets, or run zfs send piping to a specified command.
+# More documentation is available at
+# http://src.opensolaris.org/source/xref/jds/zfs-snapshot/README.zfs-auto-snapshot.txt
 #
 # The service will move itself into maintenance if it's unable to take a
-# snapshot, destroy a snapshot as per the snapshot retention policy, unable to
+# snapshot, destroy a snapshot as per the snapshot retention policy, is unable to
 # zfs send a dataset (if configured) or is unable to create or update the cron
 # job.
 #
@@ -49,14 +48,13 @@
 # subprocesses, and when called with a non-zero argument, will degrade the
 # service, and log an appropriate error message.
 
-
 . /lib/svc/share/smf_include.sh
 
 result=$SMF_EXIT_OK
 
 export PATH=/usr/sbin:/usr/bin:${PATH}
 
-# A prefix we use on all snapshot created by this script.
+# A prefix we use on all snapshots created by this script.
 # See the definition of $SNAPNAME in the take_snapshot()
 # function for more information.
 PREFIX="zfs-auto-snap"
@@ -71,10 +69,9 @@ SEP=":"
 # and use logger(1) to log to syslog instead.
 LOG=""
 
-
 # Determine whether this invocation of the script can use
 # the recursive snapshot feature in some versions of ZFS.
-# a null string in this variable says we don't.
+# A null string in this variable says we don't.
 HAS_RECURSIVE=$(zfs snapshot 2>&1 | fgrep -e '-r')
 
 # OpenSolaris has no pfksh, so for now, we need to pfexec
@@ -90,6 +87,7 @@ function get_pair {
 
 # A function to pull in the variables from the FMRI given
 # as the first argument.
+#
 function zfs_smf_props {
 
 IFS="
@@ -113,6 +111,7 @@ done
 # calls a function to create cron job that schedules a snapshot schedule based
 # on the properties set in the service instance.
 # $1 is assumed to be a valid FMRI
+#
 function schedule_snapshots {
 
 	typeset FMRI=$1
@@ -167,11 +166,10 @@ function schedule_snapshots {
 }
 
 
-#
 # Adding a cron job that runs exactly every x time-intervals is hard to do
 # properly.
 #
-# For now, what I'm doing, is dividing the interval up into x bite chunks
+# For now, what we're doing, is dividing the interval up into x bite chunks
 # and running the cron job that often. The problem comes where the interval
 # doesn't evenly divide up into x, leaving us taking to many, or too
 # few snapshots at the edge of time intervals.
@@ -215,7 +213,7 @@ function add_cron_job { # $INTERVAL $PERIOD $OFFSET $FMRI
 	# Since we may have multiple instances all trying to start at
 	# the same time, we need some form of locking around crontab.
  	# Normally we'd be able to get SMF to manage this, by defining dependencies -
-	# but I'm not sure there's a way to prevent it from starting two instances
+	# but we're not sure there's a way to prevent it from starting two instances
 	# at the same time (without requiring users to explicitly state dependencies
 	# and change them each time new instances are added)
 
@@ -232,7 +230,7 @@ function add_cron_job { # $INTERVAL $PERIOD $OFFSET $FMRI
 	done
 
 	# adding a cron job is essentially just looking for an existing entry,
-	# removing it, and appending a new one. Neato.
+	# removing it, and appending a new one.
 	crontab -l | grep -v "/lib/svc/method/zfs-auto-snapshot $FMRI$" \
 	    > /tmp/saved-crontab.$$
 
@@ -252,6 +250,7 @@ function add_cron_job { # $INTERVAL $PERIOD $OFFSET $FMRI
 
 # this function removes a cron job was taking snapshots of $FMRI
 # $1 is assumed to be a valid FMRI
+#
 function unschedule_snapshots {
 
 	typeset FMRI=$1
@@ -295,6 +294,7 @@ function unschedule_snapshots {
 # This function is intended to be called on service start. It checks to see
 # if the last snapshot was taken more than <frequency> <intervals> ago,
 # and if that's the case, takes a snapshot immediatedly.
+#
 function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI <repopulate cache>
 
 	typeset INTERVAL=$1
@@ -308,7 +308,7 @@ function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI <repopulate cache>
 	fi
 
 	# // is special, in that we take snapshots based on user properties
-	# so here, we get those properties, and call ourselves again, with
+	# so here, we get those properties and call ourselves again, with
 	# those values.
 	case "$FILESYS" in
 	"//")
@@ -345,13 +345,12 @@ function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI <repopulate cache>
 	LAST_SNAPSHOT=$(zfs list -H -o name -r -t snapshot ${fs[0]} \
 		| grep "${fs[0]}@${PREFIX}${LABEL}" | tail -1)
 
-	# if we've never taken a snapshot, then we probably should
+	# if we've never taken a snapshot, then we should
 	# arrange to have one taken now. Fake the LAST_SNAP_TIME variable
 	if [ -z "$LAST_SNAPSHOT" ] ; then
 		LAST_SNAP_TIME=0
 		LAST_SNAP_TIME_HUMAN="[ no snapshot taken yet ]"
 	fi
-
 
 	# if we have taken a snapshot, find out when it was
 	if [ -n "$LAST_SNAPSHOT" ] ; then
@@ -419,14 +418,14 @@ function take_snapshot {
 	# requested one, which then gets used in the SNAPNAME.  SMF
 	# returns the value '""' for the empty string to differentiate
 	# between an unset property, and a set-but-empty property.
-	# Shocking, I know.
 	typeset LABEL="$label"
 	
 	# the "//" filesystem is special. We use it as a keyword
 	# to determine whether to poll the ZFS "com.sun:auto-snapshot:${LABEL}"
 	# user property which specifies which datasets should be snapshotted
 	# and under which "label" - a set of default service instances that
-	# snapshot at defined periods (daily, weekly, monthly, every 15 mins)
+	# snapshot at defined periods (daily, hourly, weekly, monthly, every
+	# 15 mins) are provided already.
 	# Determine what these are, call ourselves again, then return.
 	case "$FILESYS" in
 	"//")
@@ -454,19 +453,19 @@ function take_snapshot {
 	    LABEL=""
 	fi
 
-	# A flag for whether we're running in verbose mode or not
+	# A flag for whether we're running in verbose mode
 	VERBOSE="$verbose"
 
 	typeset SNAPNAME="${PREFIX}${LABEL}-${DATE}"
 	
-	# Determine whether we should avoid scrubbing
+	# Determine whether we should avoid pools which are scrubbing
 	typeset AVOIDSCRUB=$avoidscrub
 
 	# prune out the filesystems that are on pools currently being
 	# scrubbed or resilvered. There's a risk that a scrub/resilver
-	# will be started just after this check completes, but there's
-	# also the risk that a running scrub will complete just after this
-	# check. Life's hard.
+	# will be started just after this check completes, and also
+	# the risk that a running scrub will complete just after this
+	# check.
 	if [ "$AVOIDSCRUB" == "true" ] ; then
 	    # lists of pools and datasets that are known not to be scrubbing
 	    NOSCRUBLIST=""
@@ -578,7 +577,7 @@ function destroy_older_snapshots {
 # we don't degrade the service. We also log an error message as passed into
 # this function.
 #
-function check_failure { # integer exit status, error message to display, be fatal
+function check_failure { # integer exit status, error message, non-fatal flag
 
 	typeset RESULT=$1
 	typeset ERR_MSG=$2
@@ -586,7 +585,6 @@ function check_failure { # integer exit status, error message to display, be fat
 
 	if [ $RESULT -ne 0 ] ; then
 	    print_log "Error: $ERR_MSG"
-	    print_log "Moving service $FMRI to maintenance mode."
 	    if [ -z "${NON_FATAL}" ] ; then
 		print_log "Moving service $FMRI to maintenance mode."
 	        svcadm mark maintenance $FMRI
@@ -598,7 +596,8 @@ function check_failure { # integer exit status, error message to display, be fat
 
 # A function we use to emit output. Right now, this goes to syslog via logger(1)
 # as well as being echoed to stdout which will result in it being picked up by
-# SMF.
+# SMF if the $LOG variable is unset.
+#
 function print_log { # message to display
 	logger -t zfs-auto-snap -p daemon.notice $*
 	if [ -z "$LOG" ] ; then
@@ -609,6 +608,7 @@ function print_log { # message to display
 # Another function to emit output, this time checking to see if the
 # user has set the service into verbose mode, otherwise, we print nothing
 # This goes to stdout, and will get collected by either SMF or cron
+#
 function print_note { # mesage to display
 	if [ "$VERBOSE" == "true" ] ; then
 		echo $(date "+%b %d %T") $*
