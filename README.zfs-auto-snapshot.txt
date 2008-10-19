@@ -1,7 +1,7 @@
 
 NAME 
 
-ZFS Automatic Snapshot SMF Service, version 0.11
+ZFS Automatic Snapshot SMF Service, version 0.11.2
 
 
 DESCRIPTION 
@@ -20,7 +20,7 @@ application.
 
 INSTALLATION
 
-To install, as root, pkgadd TIMFauto-snapshot. This package now contains
+To install, as root, pkgadd SUNWzfs-auto-snapshot. This package now contains
 several canned SMF instances. These are:
 
 online          1:17:43 svc:/system/filesystem/zfs/auto-snapshot:hourly

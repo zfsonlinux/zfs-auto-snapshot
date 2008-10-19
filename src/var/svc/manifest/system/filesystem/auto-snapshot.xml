@@ -84,33 +84,33 @@
         </property_group>
 
 
-<!-- the properties we expect that any instance will define
-they being :
+<!-- The properties we expect that any instance will define:
+
 	fs-name : The name of the filesystem we want to snapshot.
 
-	The special filesystem name "//" indicates we should
-	look at the com.sun:auto-snapshot ZFS user
-	properties on datasets, set to "true" if the dataset
-	should have snapshots taken by this instance.
+		The special filesystem name "//" indicates we should
+		look at the com.sun:auto-snapshot ZFS user
+		properties on datasets, set to "true" if the dataset
+		should have snapshots taken by this instance.
 	
-	If unset, snapshots will not be taken by this instance.
+		If unset, snapshots will not be taken by this instance.
 	
-	The snapshot-children property is ignored when using
-	this setting, instead the system will automatically
-	determine how to take snapshots, based on which datasets
-	have true, false or unset property values.
+		The snapshot-children property is ignored when using
+		this setting, instead the system will automatically
+		determine how to take snapshots, based on which datasets
+		have true, false or unset property values.
 
-	Setting com.sun:auto-snapshot:<label> will override 
-	the general setting for com.sun:auto-snapshot.
+		Setting com.sun:auto-snapshot:<label> will override
+		the general setting for com.sun:auto-snapshot.
 	
 
 	interval : minutes | hours | days | months | none
 
-	For the interval "none" a cron job is not created for that
-	instance - instead the user can manually fire the method
-	script to take snapshots defined by the rest of the properties
-	in the instance. The period and offset values are ignored in
-	this case.
+		For the interval "none" a cron job is not created for that
+		instance - instead the user can manually fire the method
+		script to take snapshots defined by the rest of the properties
+		in the instance. The period and offset values are ignored in
+		this case.
 
 	period : How many (m,h,d,m) do we wait between snapshots
 
@@ -161,72 +161,282 @@ they being :
 	  <propval name="fs-name" type="astring" value="Not set" override="true"/>
 	  <propval name="interval" type="astring" value="Not set" override="true"/>
 	  <propval name="offset" type="astring" value="Not set" override="true"/>
-	  <propval name="snapshot-children" type="boolean" value="false" override="true"/>
+	  <propval name="snapshot-children" type="boolean" value="false"
+		   override="true"/>
 	  <propval name="keep" type="astring" value="all" override="true"/>
 
 	  <propval name="backup" type="astring" value="none" override="true"/>
 	  <propval name="backup-save-cmd" type="astring" value="" override="true"/>
-	  <propval name="backup-lock" type="astring" value="unlocked" override="true"/>
+	  <propval name="backup-lock" type="astring" value="unlocked"
+		   override="true"/>
 
 	  <propval name="label" type="astring" value="" override="true"/>
 	  <propval name="verbose" type="boolean" value="false" override="true"/>
 	  <propval name="avoidscrub" type="boolean" value="false" override="true"/>
-	  <propval name='value_authorization' type='astring'
-		   value='solaris.smf.manage.zfs-auto-snapshot' />
 	</property_group>
 
-	<!-- we're *not* defining an instance here : the idea is that instances
-	  of this service will be created, one per set of auto-snapshots we want
-	  to take. For reference purposes, here's what such an instance should
-	  look like :
 
-	<instance name='tank-timf' enabled='false' >
+	<!-- We now define a set of default instances to take frequent,
+	     hourly, daily, weekly and monthly snapshots --> 
 
-	   note: recommend an infinite timeout here - or at least a long one,
-	         SMF tries to start all instances in parallel, however, since
-		 we need to add entries to cron, we need to put locks around
-		 start and stop, running these serially - if there are
-		 sufficiently high numbers of instances, we can trip, say a 10
-		 sec. timeout.
+
+	<!-- This instance recursively snapshots all
+     	     filesystems marked with the ZFS User Property 
+     	     com.sun:auto-snapshot:frequent=true every
+     	     15 minutes, and keeps 4 of these snapshots into the past.
+	-->
+
+	<instance name='frequent' enabled='false' >
+
+	<property_group name='general' type='framework'>
+		<propval name='action_authorization' type='astring'
+		value='solaris.smf.manage.zfs-auto-snapshot' />
+		<propval name='value_authorization' type='astring'
+		value='solaris.smf.manage.zfs-auto-snapshot' />
+	</property_group>
 
 	<property_group name="zfs" type="application">
 
-	  <propval name="fs-name" type="astring" value="tank/timf"/>
-	  <propval name="interval" type="astring" value="days"/>
-	  <propval name="period" type="astring" value="7"/>
-	  <propval name="offset" type="astring" value="0"/>
-	  <propval name="snapshot-children" type="boolean" value="false"/>
+	  <propval name="fs-name" type="astring" value="//" 
+		   override="true"/>
+	  <propval name="interval" type="astring" value="minutes"
+		   override="true"/>
+	  <propval name="period" type="astring" value="15"
+		   override="true"/>
+	  <propval name="offset" type="astring" value="0"
+		   override="true"/>
+	  <propval name="keep" type="astring" value="4"
+		   override="true"/>
+	  <propval name="snapshot-children" type="boolean" value="true"
+		   override="true"/>
 
-	  <propval name="backup" type="astring" value="full" override="true"/>
-	  <propval name="backup-save-cmd" type="astring" override="true"
-			value="ssh haiiro.ireland zfs receive -d tank/data "/>
-	  <propval name="backup-lock" type="astring" value="unlocked" 
-			override="true"/>
+	  <propval name="backup" type="astring" value="none"
+		   override="true"/>
+	  <propval name="backup-save-cmd" type="astring" value="not set"
+		   override="true"/>
+	  <propval name="backup-lock" type="astring" value="unlocked"
+		   override="true"/>
 
-	  <propval name="label" type="astring" value="all" override="true"/>
+	  <propval name="label" type="astring" value="frequent"
+		override="true"/>
 
-	  <propval name="verbose" type="boolean" value="false" override="true"/>
+	  <propval name="verbose" type="boolean" value="false"
+		override="true"/>
 
-	  <propval name="avoidscrub" type="boolean" value="false" override="true"/>
+          <propval name="avoidscrub" type="boolean" value="false"
+		override="false"/>
 
 	</property_group>
 
 	</instance>
 
-	A set of instances are provided that snapshot periodically hourly, 
-	daily, weekly, monthly, and at 15 minute intervals, and have their
-	fs-name set to "//", consulting the com.sun:auto-snapshot:hourly,etc.
-	ZFS user properties to determine which datasets to snapshot.
-
+	<!-- This instance recursively snapshots all
+     	     filesystems marked with the ZFS User Property 
+     	     com.sun:auto-snapshot:hourly=true every
+     	     hour, and keeps 24 of these snapshots into the past.
 	-->
+
+	<instance name='hourly' enabled='false' >
+
+	<property_group name='general' type='framework'>
+		<propval name='action_authorization' type='astring'
+		value='solaris.smf.manage.zfs-auto-snapshot' />
+		<propval name='value_authorization' type='astring'
+		value='solaris.smf.manage.zfs-auto-snapshot' />
+	</property_group>
+
+	<property_group name="zfs" type="application">
+
+	  <propval name="fs-name" type="astring" value="//" 
+		   override="true"/>
+	  <propval name="interval" type="astring" value="hours"
+		   override="true"/>
+	  <propval name="period" type="astring" value="1"
+		   override="true"/>
+	  <propval name="offset" type="astring" value="0"
+		   override="true"/>
+	  <propval name="keep" type="astring" value="24"
+		   override="true"/>
+	  <propval name="snapshot-children" type="boolean" value="true"
+		   override="true"/>
+
+	  <propval name="backup" type="astring" value="none"
+		   override="true"/>
+	  <propval name="backup-save-cmd" type="astring" value="not set"
+		   override="true"/>
+	  <propval name="backup-lock" type="astring" value="unlocked"
+		   override="true"/>
+
+	  <propval name="label" type="astring" value="hourly"
+		   override="true"/>
+
+	  <propval name="verbose" type="boolean" value="false"
+		   override="true"/>
+
+	  <propval name="avoidscrub" type="boolean" value="false"
+		   override="false"/>
+
+	</property_group>
+
+	</instance>
+
+
+	<!-- This instance recursively snapshots all
+     	     filesystems marked with the ZFS User Property 
+     	     com.sun:auto-snapshot:daily=true every
+     	     day, and keeps 31 of these snapshots into the past.
+	-->
+
+	<instance name='daily' enabled='false' >
+
+	<property_group name='general' type='framework'>
+		<propval name='action_authorization' type='astring'
+		value='solaris.smf.manage.zfs-auto-snapshot' />
+		<propval name='value_authorization' type='astring'
+		value='solaris.smf.manage.zfs-auto-snapshot' />
+	</property_group>
+
+	<property_group name="zfs" type="application">
+
+	  <propval name="fs-name" type="astring" value="//" 
+		   override="true"/>
+	  <propval name="interval" type="astring" value="days"
+		   override="true"/>
+	  <propval name="period" type="astring" value="1"
+		   override="true"/>
+	  <propval name="offset" type="astring" value="0"
+		   override="true"/>
+	  <propval name="keep" type="astring" value="31"
+		   override="true"/>
+	  <propval name="snapshot-children" type="boolean" value="true"
+		   override="true"/>
+
+	  <propval name="backup" type="astring" value="none"
+		   override="true"/>
+	  <propval name="backup-save-cmd" type="astring" value="not set"
+		   override="true"/>
+	  <propval name="backup-lock" type="astring" value="unlocked"
+		   override="true"/>
+
+	  <propval name="label" type="astring" value="daily"
+		   override="true"/>
+
+	  <propval name="verbose" type="boolean" value="false"
+		   override="true"/>
+
+	  <propval name="avoidscrub" type="boolean" value="false"
+		   override="false"/>
+
+	</property_group>
+
+	</instance>
+
+	<!-- This instance recursively snapshots all
+     	     filesystems marked with the ZFS User Property 
+     	     com.sun:auto-snapshot:weekly=true every
+     	     7 days, and keeps 4 of these snapshots into the past.
+	-->
+
+	<instance name='weekly' enabled='false' >
+
+	<property_group name='general' type='framework'>
+		<propval name='action_authorization' type='astring'
+		value='solaris.smf.manage.zfs-auto-snapshot' />
+		<propval name='value_authorization' type='astring'
+		value='solaris.smf.manage.zfs-auto-snapshot' />
+	</property_group>
+
+	<property_group name="zfs" type="application">
+
+	  <propval name="fs-name" type="astring" value="//" 
+		   override="true"/>
+	  <propval name="interval" type="astring" value="days"
+		   override="true"/>
+	  <propval name="period" type="astring" value="7"
+		   override="true"/>
+	  <propval name="offset" type="astring" value="0"
+		   override="true"/>
+	  <propval name="keep" type="astring" value="4"
+		   override="true"/>
+	  <propval name="snapshot-children" type="boolean" value="true"
+		   override="true"/>
+
+	  <propval name="backup" type="astring" value="none"
+		   override="true"/>
+	  <propval name="backup-save-cmd" type="astring" value="not set"
+		   override="true"/>
+	  <propval name="backup-lock" type="astring" value="unlocked"
+		   override="true"/>
+
+	  <propval name="label" type="astring" value="weekly"
+		   override="true"/>
+
+	  <propval name="verbose" type="boolean" value="false"
+		   override="true"/>
+
+	  <propval name="avoidscrub" type="boolean" value="false"
+		   override="false"/>
+
+	</property_group>
+
+	</instance>
+
+
+	<!-- This instance recursively snapshots all
+     	     filesystems marked with the ZFS User Property 
+     	     com.sun:auto-snapshot:monthly=true every
+     	     month, and keeps 12 of these snapshots into the past.
+	-->
+
+	<instance name='monthly' enabled='false' >
+
+	<property_group name='general' type='framework'>
+		<propval name='action_authorization' type='astring'
+		value='solaris.smf.manage.zfs-auto-snapshot' />
+		<propval name='value_authorization' type='astring'
+		value='solaris.smf.manage.zfs-auto-snapshot' />
+	</property_group>
+
+	<property_group name="zfs" type="application">
+
+	  <propval name="fs-name" type="astring" value="//" 
+		   override="true"/>
+	  <propval name="interval" type="astring" value="months"
+		   override="true"/>
+	  <propval name="period" type="astring" value="1"
+		   override="true"/>
+	  <propval name="offset" type="astring" value="0"
+		   override="true"/>
+	  <propval name="keep" type="astring" value="12"
+		   override="true"/>
+	  <propval name="snapshot-children" type="boolean" value="true"
+		   override="true"/>
+
+	  <propval name="backup" type="astring" value="none"
+		   override="true"/>
+	  <propval name="backup-save-cmd" type="astring" value="not set"
+		   override="true"/>
+	  <propval name="backup-lock" type="astring" value="unlocked"
+		   override="true"/>
+
+	  <propval name="label" type="astring" value="monthly"
+		   override="true"/>
+
+	  <propval name="verbose" type="boolean" value="false"
+		   override="true"/>
+
+	  <propval name="avoidscrub" type="boolean" value="true"
+		   override="false"/>
+
+	</property_group>
+
+	</instance>
 
 	<stability value='Unstable' />
 
 	<template>
 		<common_name>
-			<loctext xml:lang='C'>
-ZFS automatic snapshots
-			</loctext>
+			<loctext xml:lang='C'>ZFS automatic snapshots</loctext>
 		</common_name>
 		<description>
 			<loctext xml:lang='C'>
@@ -248,5 +458,4 @@ Care should be taken when configuring backups to ensure that the time granularit
 		</description>
 	</template>
 </service>
-
 </service_bundle>
