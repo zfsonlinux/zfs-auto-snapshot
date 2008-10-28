@@ -746,29 +746,46 @@ function take_backup { # filesystem backup-type label fmri
 }
 
 
-# Given a sorted list of filesystems, determine whether any of the
-# listed filesystems are redundant
+# Given a sorted list of filesystems of which we can take recursive snapshots,
+# determine whether any of the listed filesystems are redundant
 # eg. for tank/other tank/foo tank/other/bar tank/foo/bar
-# we only need to snapshot tank/other and tank/foo
+# we only need to recursively snapshot tank/other and tank/foo
 function narrow_recursive_filesystems {
-	# for each filesystem in the list, get each of it's ancestors
-	# if any of the ancestors is already in the list, don't add it,
-	# otherwise, do.
+	# for each filesystem in the list, walk back through each of it's
+	# ancestors. If any of the ancestors is already in the list, don't
+	# add it to the list of recursive snapshots, otherwise, do.
 	typeset LIST=""
 	for ds in $@ ; do
 		ANCESTOR_IN_LIST=""
-		ancestor=$(dirname $ds)
+		last="$ds"
+		# the equivalent of dirname $ds
+		ancestor=${ds%/*}
+		if [ "$last" == "$ancestor" ] ; then
+			ancestor="."
+		fi
+
 		while [ $ancestor != "." ] ; do
-			if echo $LIST | fgrep $ancestor// > /dev/null ; then
+			# check to delete "$ancestor//" from the list
+			# if it wasn't there, we get back the same list
+			NEW=${LIST##*$ancestor//*}
+			if [ "$LIST" != "$NEW" ] ; then
 				ANCESTOR_IN_LIST=true
 			fi
-			ancestor=$(dirname $ancestor)
+			# replace ancestor with the equivalent of
+			# /usr/bin/dirname $ancestor
+			last=${ancestor}
+			ancestor=${ancestor%/*}
+			# do what dirname does when we reach the last entry
+			if [ $last == "$ancestor" ] ; then
+				ancestor="."
+			fi
 		done
 		if [ -z "${ANCESTOR_IN_LIST}" ] ; then
 			LIST="${LIST} ${ds}//"
 		fi
 	done
-	echo ${LIST} | sed -e 's#//##g'
+	# remove the // separators from the string
+	echo ${LIST//\/\//}
 }
 
 function can_recursive_snapshot {
@@ -784,11 +801,15 @@ function can_recursive_snapshot {
 
 function is_excluded {
         typeset ds=$1
-        if egrep "$ds	" $EXCLUDE > /dev/null ; then
-                return 0
-        else
-                return 1
-        fi
+	# try to delete "$ds	" in exclude, if we get back the
+	# same list, then it wasn't there
+
+	NEW=${EXCLUDE_VAR##*$ds	*}
+	if [ "$NEW" == "$EXCLUDE_VAR" ] ; then
+		return 1
+	else
+		return 0
+	fi
 }
 
 # This builds two lists of datasets - RECURSIVE_LIST and SINGLE_LIST
@@ -806,6 +827,11 @@ function get_userprop_datasets {
   	zfs list -H -t filesystem,volume -o \
 	name,com.sun:auto-snapshot,com.sun:auto-snapshot:${LABEL} > $ALL
 	cat $ALL | egrep -e "false$"\|"false	-$" > $EXCLUDE
+	# save the above in a variable, preserving newlines
+	IFS=''
+	EXCLUDE_VAR=$(cat $EXCLUDE)
+	export EXCLUDE_VAR
+	unset IFS
 
 	# iterating through datasets
 	for ds in $(cat $ALL | cut -f1 | sort -u) ; do
