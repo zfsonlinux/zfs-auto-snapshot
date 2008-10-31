@@ -375,6 +375,9 @@ function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI <repopulate cache>
 	"days")
 		MULTIPLIER=$DAY_S
 	;;
+	"months")
+		MULTIPLIER=$MONTH_S
+	;;
 	"none")
 		return 0
 	;;
