@@ -922,28 +922,29 @@ function auto_include {
 		# This is the first time the service has run on this pool,
 		# set appropriate zfs user properties on it
 		$PFZFS set com.sun:auto-snapshot=true $pool
-
-		# check for swap and dump devices and disable snapshots there
-		SWAP=$(swap -l | grep "/dev/zvol/dsk/$pool/" | awk '{print $1}')
-		for swap in $SWAP ; do
-			vol=$(echo $swap | sed -e 's#/dev/zvol/dsk/##')
-			echo "Disabling snapshots for swap device $vol"
-			$PFZFS set com.sun:auto-snapshot=false $vol
-		done
-
-		# can't run dumpadm as a non-root user, so check for dumpadm.conf
-		if [ -r /etc/dumpadm.conf ] ; then
-			DUMP=$(grep "^DUMPADM_DEVICE=" /etc/dumpadm.conf |\
-				grep "/dev/zvol/dsk/$pool/" |\
-				awk -F= '{print $2}')
-			if [ -n "$DUMP" ] ; then
-				vol=$(echo $DUMP | sed -e 's#/dev/zvol/dsk/##')
-				echo "Disabling snapshots for dump device $vol"
-				$PFZFS set com.sun:auto-snapshot=false $vol
-			fi
-		fi
 	done
 
+	# check for swap devices using zvols
+	SWAP=$(swap -l | grep "/dev/zvol/dsk/" | awk '{print $1}')
+	SWAPVOLS=""
+	for swap in $SWAP ; do
+		SWAPVOLS="$SWAPVOLS $(echo $swap | sed -e 's#/dev/zvol/dsk/##')"
+	done
+
+	# can't run dumpadm as a non-root user, so check for dumpadm.conf
+	if [ -r /etc/dumpadm.conf ] ; then
+		DUMP=$(grep "^DUMPADM_DEVICE=" /etc/dumpadm.conf |\
+			grep "/dev/zvol/dsk/" |\
+			awk -F= '{print $2}')
+		if [ -n "$DUMP" ] ; then
+			DUMPVOL=$(echo $DUMP | sed -e 's#/dev/zvol/dsk/##')
+		fi
+	fi
+
+	if [ -n "${SWAPVOLS}${DUMPVOL}" ] ; then
+		# disable snapshots on our swap and dump devices
+		$PFZFS set com.sun:auto-snapshot=false $SWAPVOLS $DUMPVOL
+	fi
 }
 
 
