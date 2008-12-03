@@ -136,9 +136,6 @@ function schedule_snapshots {
 	;;
 	esac
 
-	# for now, we're forcing the offset to be 0 seconds.
-	typeset OFFSET=0
-
 	case $FILESYS in
 	'//')
 		;;
@@ -184,25 +181,37 @@ function add_cron_job { # $INTERVAL $PERIOD $OFFSET $FMRI
 	typeset OFFSET=$3
 	typeset FMRI=$4
 
+	DAYS=$((${OFFSET} / 86400))
+	LEFT=$((${OFFSET} % 86400))
+	HOURS=$((${LEFT} / 3600))
+	LEFT=$((${LEFT} % 3600))
+	MINUTES=$((${LEFT} / 60))
+
+	((${DAYS} > 31)) && DAYS=31
+
 	case $INTERVAL in
 	'minutes')
-	    TIMES=$(get_divisor 0 59 $PERIOD)
+	    ((${PERIOD} < ${MINUTES})) && MINUTES=0
+	    TIMES=$(get_divisor ${MINUTES} 59 $PERIOD)
 	    ENTRY="$TIMES * * * *"		
 	;;
 
 	'hours')
-	    TIMES=$(get_divisor 0 23 $PERIOD)
-	    ENTRY="0 $TIMES * * *"
+	    ((${PERIOD} < ${HOURS})) && HOURS=0
+	    TIMES=$(get_divisor ${HOURS} 23 $PERIOD)
+	    ENTRY="${MINUTES} $TIMES * * *"
 	;;
 
 	'days')
-	    TIMES=$(get_divisor 1 31 $PERIOD)
-	    ENTRY="0 0 $TIMES * *"
+	    ((${PERIOD} < ${DAYS} || ${DAYS} == 0)) && DAYS=1
+	    TIMES=$(get_divisor ${DAYS} 31 $PERIOD)
+	    ENTRY="${MINUTES} ${HOURS} $TIMES * *"
 	;;
 
 	'months')
+	    ((${DAYS} == 0)) && DAYS=1
 	    TIMES=$(get_divisor 1 12 $PERIOD)
-	    ENTRY="0 0 1 $TIMES *"
+	    ENTRY="${MINUTES} ${HOURS} ${DAYS} $TIMES *"
 	;;
 
 	'none')

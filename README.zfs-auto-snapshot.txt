@@ -1,7 +1,7 @@
 
 NAME 
 
-ZFS Automatic Snapshot SMF Service, version 0.11.2
+ZFS Automatic Snapshot SMF Service, version 0.11.3
 
 
 DESCRIPTION 
@@ -78,6 +78,12 @@ The properties each instance needs are:
  zfs/period		How often you want to take snapshots, in intervals
 			set according to "zfs/interval"
 			 (eg. every 10 days)
+
+ zfs/offset		The time from the start of the current interval at which
+			snapshots should be taken, expressed in seconds. For example
+			to take snapshots hourly at 15 minutes into the hour,
+			zfs/offset = 900 (60 sec. * 15)  To take daily snapshots at
+			15:43, zfs/offset = 56580.
 
  zfs/snapshot-children	"true" if you would like to recursively take snapshots
 			of all child filesystems of the specified fs-name.
