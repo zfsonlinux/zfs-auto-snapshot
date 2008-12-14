@@ -64,9 +64,10 @@ PREFIX="zfs-auto-snap"
 # clients can get confused by colons. Who knew?
 SEP=":"
 
-# A string we use to determine whether to echo log messages
+# A flag we use to determine whether to echo log messages
 # to stdout (and get picked up by SMF) or remain silent
-# and use logger(1) to log to syslog instead.
+# and use logger(1) to log to syslog instead if the flag is
+# null.
 LOG=""
 
 # Determine whether this invocation of the script can use
@@ -92,12 +93,12 @@ function zfs_smf_props {
 
 IFS="
 "
-SMF_PROPS="$(svcprop -t -p zfs -p restarter/logfile $1 |\
+SMF_PROPS="$(svcprop -t -p zfs $1 |\
             sed -e 's#zfs/fs-name#zfs/fs_name#g' \
         -e 's#zfs/backup-lock#zfs/backup_lock#g' \
         -e 's#zfs/snapshot-children#zfs/snapshot_children#g' \
         -e 's#zfs/backup-save-cmd#zfs/backup_save_cmd#g' \
-        -e 's#zfs/##g' -e 's#restarter/##g' -e 's/$/,/g')"
+        -e 's#zfs/##g' -e 's/$/,/g')"
 IFS=,
 for line in $SMF_PROPS ; do
         IFS=' 	
@@ -608,7 +609,7 @@ function check_failure { # integer exit status, error message, non-fatal flag
 
 # A function we use to emit output. Right now, this goes to syslog via logger(1)
 # as well as being echoed to stdout which will result in it being picked up by
-# SMF if the $LOG variable is unset.
+# SMF if the $LOG variable is null.
 #
 function print_log { # message to display
 	logger -t zfs-auto-snap -p daemon.notice $*
@@ -619,11 +620,14 @@ function print_log { # message to display
 
 # Another function to emit output, this time checking to see if the
 # user has set the service into verbose mode, otherwise, we print nothing
-# This goes to stdout, and will get collected by either SMF or cron
 #
 function print_note { # mesage to display
 	if [ "$VERBOSE" == "true" ] ; then
-		echo $(date "+%b %d %T") $*
+		if [ -z "$LOG" ] ; then
+			echo $*
+		else
+			print_log $*
+		fi
 	fi
 }
 
@@ -1004,14 +1008,21 @@ case "$1" in
 
 	case $SMF_FMRI in
 		svc:/*)
-			zfs_smf_props $SMF_FMRI
-			export LOG="false"
+			TTYOUTPUT=$(zfs_smf_props $SMF_FMRI 2>&1)
+			export LOG="true"
+			if [ -n "$TTYOUTPUT" ] ; then
+			    print_log "$TTYOUTPUT"
+			fi
 
-			take_snapshot $SMF_FMRI
+			TTYOUTPUT=$(take_snapshot $SMF_FMRI 2>&1)
 			if [ $? -eq 0 ] ; then
 			    result=$SMF_EXIT_OK
 			else
 			    result=$SMF_EXIT_ERR_FATAL
+			fi
+
+			if [ -n "$TTYOUTPUT" ] ; then
+			    print_log "$TTYOUTPUT"
 			fi
 			;;
 		*)
