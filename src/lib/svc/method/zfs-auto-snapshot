@@ -21,7 +21,7 @@
 #
 # CDDL HEADER END
 #
-# Copyright 2008 Sun Microsystems, Inc.  All rights reserved.
+# Copyright 2009 Sun Microsystems, Inc.  All rights reserved.
 # Use is subject to license terms.
 #
 
@@ -59,25 +59,18 @@ export PATH=/usr/sbin:/usr/bin:${PATH}
 # function for more information.
 PREFIX="zfs-auto-snap"
 
-# A separator character for date strings, and to delimit
-# snapshot label names. Needed because apparantly Samba
-# clients can get confused by colons. Who knew?
-SEP=":"
-
 # A flag we use to determine whether to echo log messages
 # to stdout (and get picked up by SMF) or remain silent
 # and use logger(1) to log to syslog instead if the flag is
 # null.
 LOG=""
 
-# Determine whether this invocation of the script can use
-# the recursive snapshot feature in some versions of ZFS.
-# A null string in this variable says we don't.
-HAS_RECURSIVE=$(zfs snapshot 2>&1 | fgrep -e '-r')
-
 # OpenSolaris has no pfksh, so for now, we need to pfexec
 # all calls to zfs that require privileges
-PFZFS="pfexec zfs"
+function pfexec_zfs {
+	pfexec zfs $@
+	return $?
+}
 
 function get_pair {
         NAME=$1
@@ -98,6 +91,7 @@ SMF_PROPS="$(svcprop -t -p zfs $1 |\
         -e 's#zfs/backup-lock#zfs/backup_lock#g' \
         -e 's#zfs/snapshot-children#zfs/snapshot_children#g' \
         -e 's#zfs/backup-save-cmd#zfs/backup_save_cmd#g' \
+	-e 's#zfs/auto-include#zfs/auto_include#g' \
         -e 's#zfs/##g' -e 's/$/,/g')"
 IFS=,
 for line in $SMF_PROPS ; do
@@ -235,7 +229,7 @@ function add_cron_job { # $INTERVAL $PERIOD $OFFSET $FMRI
 	    if [ $? -eq 0 ] ; then
 	        LOCK_OWNED=true
 	    else
-	        sleep 1
+	        sleep 0.1
 	    fi
 	done
 
@@ -278,7 +272,7 @@ function unschedule_snapshots {
 	    if [ $? -eq 0 ] ; then
 	        LOCK_OWNED=true
 	    else
-	        sleep 1
+	        sleep 0.1
 	    fi
 	done
 
@@ -312,6 +306,10 @@ function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI <repopulate cache>
 	typeset FMRI=$3
 	typeset FILESYS=$fs_name
 	typeset LABEL=$label
+	typeset SEP=$sep
+	
+	IFS="	
+"
 
 	if [ -n $4 ] ; then
 		typeset NO_CACHE_REPOPULATE=$4
@@ -324,15 +322,15 @@ function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI <repopulate cache>
 	"//")
 		get_userprop_datasets	
 		export snapshot_children=false
-		export fs_name="$SINGLE_LIST"
+		export fs_name=${SINGLE_LIST}
 		echo "Checking for non-recursive missed // snapshots $SINGLE_LIST"
 		check_missed_snapshots $INTERVAL $PERIOD $FMRI no_repopulate_cache
 
 		export snapshot_children=true
-		export fs_name="$RECURSIVE_LIST"
+		export fs_name=${RECURSIVE_LIST}
 		echo "Checking for recursive missed // snapshots $RECURSIVE_LIST"
 		check_missed_snapshots $INTERVAL $PERIOD $FMRI no_repopulate_cache
-			
+
 		return 0
 		;;
 	esac
@@ -352,8 +350,8 @@ function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI <repopulate cache>
 	# only interested in the first filesystem, assuming they
 	# all have a similar creation date.
 	set -A fs $FILESYS
-	LAST_SNAPSHOT=$(zfs list -H -o name -r -t snapshot ${fs[0]} \
-		| grep "${fs[0]}@${PREFIX}${LABEL}" | tail -1)
+	LAST_SNAPSHOT=$(zfs list -s creation -H -o name -r -t snapshot ${fs[0]} \
+		| egrep "${fs[0]}@${PREFIX}${LABEL}"\|"${fs[0]}@${PREFIX}:${label}" | tail -1)
 
 	# if we've never taken a snapshot, then we should
 	# arrange to have one taken now. Fake the LAST_SNAP_TIME variable
@@ -409,6 +407,9 @@ function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI <repopulate cache>
 # populating the SMF property cache - used only by the special
 # // snapshot type.
 function take_snapshot {
+	IFS="	
+"
+
 	# want this to be global, used by check_failure
 	FMRI=$1
 	NO_CACHE_REPOPULATE=$2
@@ -417,7 +418,8 @@ function take_snapshot {
 		zfs_smf_props $FMRI
 	fi
 
-	typeset DATE=$(date +%F-%H${SEP}%M)
+	typeset SEP=$sep
+	typeset DATE=$(date +%F-%H%M%S)
 	typeset FILESYS="$fs_name"
 	typeset KEEP=$keep
 	typeset SNAP_CHILDREN=$snapshot_children
@@ -447,13 +449,13 @@ function take_snapshot {
 
 		print_note "Taking non-recursive snapshots $SINGLE_LIST"
 		export snapshot_children=false
-		export fs_name="$SINGLE_LIST"
+		export fs_name=${SINGLE_LIST}
 		take_snapshot $FMRI no_propcache_repopulate
 		single_STATE=$?
 
 		print_note "Taking recursive snapshots of $RECURSIVE_LIST"
 		export snapshot_children=true
-		export fs_name="$RECURSIVE_LIST"
+		export fs_name=${RECURSIVE_LIST}
 		take_snapshot $FMRI no_propcache_repopulate
 		recursive_STATE=$?
 		return $single_STATE && $recursive_STATE
@@ -488,47 +490,37 @@ function take_snapshot {
 	    # that are *not* on pools that are being scrubbed/resilvered
 	    for fs in $FILESYS ; do
 		POOL=$(echo $fs | cut -d/ -f1)
-		if is_scrubbing $POOL "$NOSCRUBLIST" ; then
+		if is_scrubbing ${POOL} ${NOSCRUBLIST} ; then
 		    print_log "Pool containing $fs is being scrubbed/resilvered."
 		    print_log "Not taking snapshots for $fs."
 		else
-		    NOSCRUBLIST="$POOL $NOSCRUBLIST"
-		    NOSCRUBFILESYS="$NOSCRUBFILESYS $fs"
+		    NOSCRUBLIST="${POOL}	${NOSCRUBLIST}"
+		    NOSCRUBFILESYS="${NOSCRUBFILESYS}	${fs}"
 		fi
 	    done		
 	    FILESYS="$NOSCRUBFILESYS"
 	fi
-
 	# walk each of the filesystems specified
-	for fs in $FILESYS ; do
+	for fs in ${FILESYS} ; do
 	    # Ok, now say cheese! If we're taking recursive snapshots,
 	    # walk through the children, destroying old ones if required.
 	    if [ "${SNAP_CHILDREN}" == "true" ] ;  then
 
-		if [ -z "${HAS_RECURSIVE}" ] ; then
-	   	    for child in $(zfs list -r -H -o name -t filesystem,volume $fs) ; do
-		        destroy_older_snapshots $child $KEEP $LABEL
-		        print_note "Taking snapshot $child@$SNAPNAME"
-		        $PFZFS snapshot $child@$SNAPNAME
-			check_failure $? "Unable to take snapshot $child@$SNAPNAME."
-		    done
-		else
-		    destroy_older_snapshots $fs $KEEP $LABEL $HAS_RECURSIVE
-	            print_note "Taking recursive snapshot $fs@$SNAPNAME"
-	            $PFZFS snapshot -r $fs@$SNAPNAME
-		    check_failure $? "Unable to take recursive snapshots of $fs@$SNAPNAME."
-	        fi
+	         destroy_older_snapshots $fs $KEEP $LABEL "do_recursive_destroy"
+	         print_note "Taking recursive snapshot $fs@$SNAPNAME"
+	         pfexec_zfs snapshot -r "$fs@$SNAPNAME"
+	         check_failure $? "Unable to take recursive snapshots of $fs@$SNAPNAME."
 	
 	    else
-	         destroy_older_snapshots $fs $KEEP $LABEL
+	         destroy_older_snapshots $fs $KEEP $LABEL ""
 		 print_note "Taking snapshot $fs@$SNAPNAME"
-		 $PFZFS snapshot $fs@$SNAPNAME
+		 pfexec_zfs snapshot "$fs@$SNAPNAME"
 		 check_failure $? "Unable to take snapshot $fs@$SNAPNAME."
 	    fi
 
 	    # If the user has asked for backups, go ahead and do this.
 	    if [ "${BACKUP}" != "none" ] ;  then
-	        take_backup $fs $BACKUP "$LABEL" $FMRI
+	        take_backup "$fs" $BACKUP "$LABEL" $FMRI
 	        check_failure $? "Unable to backup filesystem $fs using \
 		        $BACKUP backup strategy."
 	    fi
@@ -556,26 +548,28 @@ function destroy_older_snapshots {
 	typeset FILESYS=$1
 	typeset COUNTER=$2
 	typeset LABEL=$3
-	typeset HAS_RECURSIVE=$4
+	typeset DO_RECURSIVE=$4
+
+	IFS="	
+"
 
 	if [ "${COUNTER}" == "all" ] ; then
 	    return 0
 	fi
 
-	if [ -n "${HAS_RECURSIVE}" ] ; then
+	if [ -n "${DO_RECURSIVE}" ] ; then
 	    typeset RECURSIVE="-r"
 	fi
 	
 	COUNTER=$(($COUNTER - 1))
 	# walk through the snapshots, newest first, destroying older ones
-	for snapshot in $(zfs list -r -t snapshot -H -o name $FILESYS \
-		 | grep "$FILESYS@${PREFIX}${LABEL}" | sort -r) ; do
-
+	for snapshot in $(zfs list -S creation -r -t snapshot -H -o name $FILESYS \
+		 | egrep -e "$FILESYS@${PREFIX}${LABEL}"\|"$FILESYS@${PREFIX}:${label}") ; do
+		echo $COUNTER
 	    if [ $COUNTER -le 0 ] ; then
-	        # using print_note, as this checks our $VERBOSE flag
 	        print_note "$snapshot being destroyed ${RECURSIVE} as per \
  retention policy."
-	        $PFZFS destroy ${RECURSIVE} $snapshot
+	        pfexec_zfs destroy ${RECURSIVE} "$snapshot"
 	        check_failure $? "Unable to destroy $snapshot" "NON_FATAL"
 	    else
 	        # don't destroy this one			
@@ -665,6 +659,8 @@ function take_backup { # filesystem backup-type label fmri
     typeset LABEL=$3
     typeset FMRI=$4
 
+    IFS="	
+"
 
     # obtain lock from fmri
     typeset LOCK=$(svcprop -p zfs/backup-lock $FMRI)
@@ -712,11 +708,12 @@ function take_backup { # filesystem backup-type label fmri
       case $BACKUP in
         "incremental")
 		# get the last two snapshots
-		LAST_SNAP=$(zfs list -H -o name -r -t snapshot $dataset \
-			    | grep "$dataset@${PREFIX}${LABEL}" | tail -1)
+		LAST_SNAP=$(zfs list -s creation -H -o name -r -t snapshot $dataset \
+			    | egrep -e "$dataset@${PREFIX}${LABEL}"\|"$dataset@${PREFIX}:${label}" \
+			    | tail -1)
 
-		PREV_SNAP=$(zfs list -H -o name -r -t snapshot $dataset \
-			    | grep "$dataset@${PREFIX}${LABEL}" \
+		PREV_SNAP=$(zfs list -s creation -H -o name -r -t snapshot $dataset \
+			    | egrep -e "$dataset@${PREFIX}${LABEL}"\|"$dataset@${PREFIX}:${label}" \
 			    | tail -2 | head -1)
 
 		if [ "$PREV_SNAP" == "$LAST_SNAP" ]
@@ -726,8 +723,9 @@ function take_backup { # filesystem backup-type label fmri
 		fi
 	;;
         "full")
- 		LAST_SNAP=$(zfs list -H -o name -r -t snapshot $dataset \
-			    | grep "$dataset@${PREFIX}${LABEL}" | tail -1)
+ 		LAST_SNAP=$(zfs list -s creation -H -o name -r -t snapshot $dataset \
+			    | egrep -e "$dataset@${PREFIX}${LABEL}"\|"$dataset@${PREFIX}:${label}" \
+			    | tail -1)
 	;;
         *)
 		check_failure 1 "Unknown backup type $BACKUP"
@@ -744,12 +742,15 @@ function take_backup { # filesystem backup-type label fmri
        case $BACKUP in
 	"incremental")
 	    print_note "Starting incr. ZFS send of differences between $PREV_SNAP and $LAST_SNAP."
-	    $PFZFS send -i $PREV_SNAP $LAST_SNAP | $BACKUP_SAVE_CMD
+	    export LAST_SNAP
+	    export PREV_SNAP
+	    pfexec_zfs send -i "$PREV_SNAP" "$LAST_SNAP" | $BACKUP_SAVE_CMD
 	    check_failure $? "Error performing incremental backup of $dataset."
 	;;
 	"full")
 	    print_note "Starting ZFS send of $LAST_SNAP."
-	    $PFZFS send $LAST_SNAP | $BACKUP_SAVE_CMD
+	    export LAST_SNAP
+	    pfexec_zfs send "$LAST_SNAP" | $BACKUP_SAVE_CMD
 	    check_failure $? "Error performing full backup of $dataset."
 	;;
        esac
@@ -767,6 +768,9 @@ function take_backup { # filesystem backup-type label fmri
 # eg. for tank/other tank/foo tank/other/bar tank/foo/bar
 # we only need to recursively snapshot tank/other and tank/foo
 function narrow_recursive_filesystems {
+
+	IFS="	
+"
 	# for each filesystem in the list, walk back through each of it's
 	# ancestors. If any of the ancestors is already in the list, don't
 	# add it to the list of recursive snapshots, otherwise, do.
@@ -797,11 +801,15 @@ function narrow_recursive_filesystems {
 			fi
 		done
 		if [ -z "${ANCESTOR_IN_LIST}" ] ; then
-			LIST="${LIST} ${ds}//"
+			if [ -z "$LIST" ] ; then
+				LIST="${ds}//"
+			else
+				LIST="${LIST}\t${ds}//"
+			fi
 		fi
 	done
 	# remove the // separators from the string
-	echo ${LIST//\/\//}
+	print -n ${LIST//\/\//}
 }
 
 function can_recursive_snapshot {
@@ -840,30 +848,46 @@ function get_userprop_datasets {
 	export ALL=/tmp/zfs-auto-snapshot-list.$$
 	export EXCLUDE=/tmp/zfs-auto-snapshot-exclude.$$
 
-  	zfs list -H -t filesystem,volume -o \
+	IFS="	
+"
+  	zfs list -H -t filesystem,volume -s name -o \
 	name,com.sun:auto-snapshot,com.sun:auto-snapshot:${LABEL} > $ALL
 	cat $ALL | egrep -e "false$"\|"false	-$" > $EXCLUDE
 	# save the above in a variable, preserving newlines
 	IFS=''
-	EXCLUDE_VAR=$(cat $EXCLUDE)
+	EXCLUDE_VAR=$(< $EXCLUDE)
 	export EXCLUDE_VAR
-	unset IFS
+	IFS="
+"
 
 	# iterating through datasets
-	for ds in $(cat $ALL | cut -f1 | sort -u) ; do
-        	if can_recursive_snapshot $ds ; then
+	for ds in $( cut -f1 < $ALL ) ; do
+        	if can_recursive_snapshot ${ds} ; then
                 	print_note "OK to recursive snapshot $ds"
-                	RECURSIVE_LIST="${RECURSIVE_LIST} $ds"
+			if [ -z "$RECURSIVE_LIST" ] ; then
+				RECURSIVE_LIST="$ds"
+			else
+                		RECURSIVE_LIST="${RECURSIVE_LIST}	$ds"
+			fi
         	else
                 	if ! is_excluded $ds ; then
                         	print_note "OK to snapshot sole dataset $ds"
-                        	SINGLE_LIST="${SINGLE_LIST} $ds"
+				if [ -z "$SINGLE_LIST" ] ; then
+					SINGLE_LIST="$ds"
+				else
+                        		SINGLE_LIST="${SINGLE_LIST}	$ds"
+				fi
                 	else
                         	print_note "$ds will not be snapshotted"
                 	fi
         	fi
 	done
 
+	# return immediately if no datasets were selected
+	if [ -z "${RECURSIVE_LIST}" ] ; then
+		return
+	fi
+	print_note "Pre-Narrowed recursive list is $RECURSIVE_LIST"
 	FINAL_RECURSIVE_LIST=$(narrow_recursive_filesystems $RECURSIVE_LIST)
 	print_note "Narrowed list of datasets to recursively snapshot is"
 	print_note "$FINAL_RECURSIVE_LIST"
@@ -891,7 +915,7 @@ function is_scrubbing { # POOL SCRUBLIST
 	# see if we can avoid running zpool status, by checking for
 	# the pool name in a known list of pools that were not scrubbing
 	# the last time we checked.
-	echo "$NOSCRUBLIST" | grep "$POOL " > /dev/null
+	echo "$NOSCRUBLIST" | grep "$POOL	" > /dev/null
 	if [ $? -eq 0 ] ; then
 	    return 1
 	fi
@@ -911,7 +935,9 @@ function is_scrubbing { # POOL SCRUBLIST
 function auto_include {
 	FS_NAME=$fs_name
 	LABEL=$label
-	if [ "$FS_NAME" == "//" ] ; then
+	IFS="	
+"
+	if [[ "$FS_NAME" == "//" && "$auto_include" == "true" ]] ; then
 		POOLS=$(zpool list -H -o name)
 		for pool in $POOLS ; do
 			if ! zpool status -x $pool | grep "state: UNAVAIL" > /dev/null ; then
@@ -924,7 +950,7 @@ function auto_include {
 				*false | false*)
 					;;
 				*)
-					FIRSTRUN_POOLS="$pool $FIRSTRUN_POOLS"
+					FIRSTRUN_POOLS="$pool	$FIRSTRUN_POOLS"
 				;;
 				esac
 			fi
@@ -937,7 +963,8 @@ function auto_include {
 		$PFZFS set com.sun:auto-snapshot=true $pool
 	done
 
-	# check for swap devices using zvols
+	# check for swap devices using zvols. 
+	# XXX spaces in dataset names cause problems here
 	SWAP=$(swap -l | grep "/dev/zvol/dsk/" | awk '{print $1}')
 	SWAPVOLS=""
 	for swap in $SWAP ; do
@@ -956,7 +983,7 @@ function auto_include {
 
 	if [ -n "${SWAPVOLS}${DUMPVOL}" ] ; then
 		# disable snapshots on our swap and dump devices
-		$PFZFS set com.sun:auto-snapshot=false $SWAPVOLS $DUMPVOL
+		pfexec_zfs set com.sun:auto-snapshot=false $SWAPVOLS $DUMPVOL
 	fi
 }
 

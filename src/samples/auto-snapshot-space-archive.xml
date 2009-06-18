@@ -7,7 +7,7 @@
 <service
 	name='system/filesystem/zfs/auto-snapshot'
 	type='service'
-	version='0.11'>
+	version='0.12'>
 	<create_default_instance enabled='false' />
 
 	<instance name='space-archive' enabled='false' >
@@ -44,6 +44,10 @@
           <propval name="verbose" type="boolean" value="false"
                    override="true"/>
 	  <propval name="avoidscrub" type="boolean" value="true"
+		   override="true"/>
+	  <propval name="sep" type="astring" value="_"
+		   override="true"/>
+	  <propval name="auto-include" type="boolean" value="true"
 		   override="true"/>
 
 	</property_group>

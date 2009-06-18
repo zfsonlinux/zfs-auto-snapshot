@@ -22,7 +22,7 @@
 
  CDDL HEADER END
 
- Copyright 2008 Sun Microsystems, Inc.  All rights reserved.
+ Copyright 2009 Sun Microsystems, Inc.  All rights reserved.
  Use is subject to license terms.
 
 -->
@@ -32,7 +32,7 @@
 <service
 	name='system/filesystem/zfs/auto-snapshot'
 	type='service'
-	version='0.11'>
+	version='0.12'>
 
 	<!-- we need to be multi-user  -->
 	<dependency
@@ -155,6 +155,13 @@
 		6343667 need itinerary so interrupted scrub/resilver
 			doesn't have to start over
 
+	sep:	Set to '_' by default, this is the character used to
+		separate datestamps used in snapshot names.
+
+	auto-include: Set to 'true' by default, this determines whether
+		on startup, we should set a property on all new pools
+		seen by the service telling the service to take snapshots
+		on that pool. 
 
 	 -->
 	<property_group name="zfs" type="application">
@@ -173,6 +180,8 @@
 	  <propval name="label" type="astring" value="" override="true"/>
 	  <propval name="verbose" type="boolean" value="false" override="true"/>
 	  <propval name="avoidscrub" type="boolean" value="false" override="true"/>
+	  <propval name="sep" type="astring" value="_" override="true"/>
+	  <propval name="auto-include" type="boolean" value="true" override="true"/>
 	</property_group>
 
 
@@ -226,6 +235,10 @@
           <propval name="avoidscrub" type="boolean" value="false"
 		override="false"/>
 
+	  <propval name="sep" type="astring" value="_"
+		override="true"/>
+	  <propval name="auto-include" type="boolean" value="true" override="true"/>
+
 	</property_group>
 
 	</instance>
@@ -275,6 +288,10 @@
 
 	  <propval name="avoidscrub" type="boolean" value="false"
 		   override="false"/>
+
+	  <propval name="sep" type="astring" value="_"
+		   override="true"/>
+	  <propval name="auto-include" type="boolean" value="true" override="true"/>
 
 	</property_group>
 
@@ -327,6 +344,10 @@
 	  <propval name="avoidscrub" type="boolean" value="false"
 		   override="false"/>
 
+	  <propval name="sep" type="astring" value="_"
+		   override="true"/>
+	  <propval name="auto-include" type="boolean" value="true" override="true"/>
+
 	</property_group>
 
 	</instance>
@@ -376,6 +397,10 @@
 
 	  <propval name="avoidscrub" type="boolean" value="false"
 		   override="false"/>
+
+	  <propval name="sep" type="astring" value="_"
+		   override="true"/>
+	  <propval name="auto-include" type="boolean" value="true" override="true"/>
 
 	</property_group>
 
@@ -427,6 +452,10 @@
 
 	  <propval name="avoidscrub" type="boolean" value="true"
 		   override="false"/>
+
+	  <propval name="sep" type="astring" value="true"
+		   override="true"/>
+	  <propval name="auto-include" type="boolean" value="true" override="true"/>
 
 	</property_group>
 
