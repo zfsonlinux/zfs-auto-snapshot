@@ -419,7 +419,7 @@ function take_snapshot {
 	fi
 
 	typeset SEP=$sep
-	typeset DATE=$(date +%F-%H%M%S)
+	typeset DATE=$(date +%F-%H%M)
 	typeset FILESYS="$fs_name"
 	typeset KEEP=$keep
 	typeset SNAP_CHILDREN=$snapshot_children
