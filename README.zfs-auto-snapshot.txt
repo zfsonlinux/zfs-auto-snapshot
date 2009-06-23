@@ -28,6 +28,7 @@ online          1:17:46 svc:/system/filesystem/zfs/auto-snapshot:monthly
 online          1:17:46 svc:/system/filesystem/zfs/auto-snapshot:daily
 online          1:17:48 svc:/system/filesystem/zfs/auto-snapshot:frequent
 online          1:17:49 svc:/system/filesystem/zfs/auto-snapshot:weekly
+online          1:17:49 svc:/system/filesystem/zfs/auto-snapshot:event
 
 These instances use the special "//" fs-name to determine which filesystems
 should be included in each snapshot schedule. See the description for "fs-name"
@@ -40,6 +41,7 @@ hourly		snapshots every hour, keeping 24 snapshots
 daily		snapshots every day, keeping 31 snapshots
 weekly		snapshots every week, keeping 7 snapshots
 monthly		snapshots every month, keeping 12 snapshots
+event		no automatic snapshots taken, keeps all snapshots
 
 The :default service instance does not need to be enabled.
 
@@ -66,7 +68,8 @@ The properties each instance needs are:
 			When set to none, we don't take automatic snapshots, but
 			leave an SMF instance available for users to manually
 			fire the method script whenever they want - useful for
-			snapshotting on system events.
+			snapshotting on system events. This is used by the
+			svc:/system/filesystem/zfs/auto-snapshot:event instance.
 
  zfs/keep		How many snapshots to retain - eg. setting this to "4"
 			would keep only the four most recent snapshots. When each
@@ -129,6 +132,28 @@ zfs/auto-include	Set to true by default, this determines whether we should
 
 
 An example instance manifest is included in this archive.
+
+
+ZFS PROPERTIES
+
+See the description of 'zfs/fs-name' above for details on the com.sun:auto-snapshot
+property, used to select datasets for inclusion into each snapshot schedule.
+
+The 'com.sun:auto-snapshot-desc' property is set on every snapshot taken
+by the service. Values for this property are not defined and are left to the individual
+user.  The service sets a value of 'Missed snapshot' in this property when snapshots
+are taken on service start (due to a previous scheduled snapshot being missed) 
+
+Similarly, users can invoke the method script with an optional string which is then set
+as a value to this property.
+
+eg.
+
+# /lib/svc/method/zfs-auto-snapshot svc:/system/filesystem/zfs/auto-snapshot:event "Samba connect"
+# zfs get com.sun:auto-snapshot-desc rpool/timf@zfs-auto-snap_event-2009-06-22-1240
+NAME                                            PROPERTY                    VALUE                       SOURCE
+rpool/timf@zfs-auto-snap_event-2009-06-22-1240  com.sun:auto-snapshot-desc  Samba connect		local
+
 
 SECURITY
 

@@ -1,10 +1,11 @@
 0.12
 
-* Added support to change the separator character in snapshot names
+* Add event-based snapshots
+* Add support to change the separator character in snapshot names
   - set the default value of "zfs/sep" to "_"
   - useful for CIFs clients that previously choked on colons in snapshot names
 * Improved shutdown speed via http://blogs.sun.com/dp/entry/speeding_to_a_halt
-* Added support to allow the user disable auto-snapshots of new pools
+* Add support to allow the user disable auto-snapshots of new pools
 * Bugfix to allow snapshots of datasets with spaces in their names
 * Bugfix to properly deal with namespace clashes in dataset names
 * Exported $LAST_SNAP and $PREV_SNAP variables when performing backups

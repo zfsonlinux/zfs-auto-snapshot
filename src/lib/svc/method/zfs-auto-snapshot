@@ -398,7 +398,7 @@ function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI <repopulate cache>
 	if [ $AGO -gt $PERIOD_S ] ; then
 		echo "Last snapshot for $FMRI taken on $LAST_SNAP_TIME_HUMAN"
 		echo "which was greater than the $PERIOD $INTERVAL schedule. Taking snapshot now."
-		take_snapshot $FMRI $NO_CACHE_REPOPULATE
+		take_snapshot $FMRI "Missed snapshot" $NO_CACHE_REPOPULATE
 	fi
 }
 
@@ -409,10 +409,10 @@ function check_missed_snapshots { # $INTERVAL $PERIOD $FMRI <repopulate cache>
 function take_snapshot {
 	IFS="	
 "
-
 	# want this to be global, used by check_failure
 	FMRI=$1
-	NO_CACHE_REPOPULATE=$2
+	EVENT="$2"
+	NO_CACHE_REPOPULATE=$3
 
 	if [ -z "$NO_CACHE_REPOPULATE" ] ; then
 		zfs_smf_props $FMRI
@@ -450,13 +450,13 @@ function take_snapshot {
 		print_note "Taking non-recursive snapshots $SINGLE_LIST"
 		export snapshot_children=false
 		export fs_name=${SINGLE_LIST}
-		take_snapshot $FMRI no_propcache_repopulate
+		take_snapshot $FMRI "$EVENT" no_propcache_repopulate
 		single_STATE=$?
 
 		print_note "Taking recursive snapshots of $RECURSIVE_LIST"
 		export snapshot_children=true
 		export fs_name=${RECURSIVE_LIST}
-		take_snapshot $FMRI no_propcache_repopulate
+		take_snapshot $FMRI "$EVENT" no_propcache_repopulate
 		recursive_STATE=$?
 		return $single_STATE && $recursive_STATE
 	;;
@@ -508,13 +508,13 @@ function take_snapshot {
 
 	         destroy_older_snapshots $fs $KEEP $LABEL "do_recursive_destroy"
 	         print_note "Taking recursive snapshot $fs@$SNAPNAME"
-	         pfexec_zfs snapshot -r "$fs@$SNAPNAME"
+	         pfexec_zfs snapshot -o com.sun:auto-snapshot-desc="$EVENT" -r ${SNAPSHOT_DESC} "$fs@$SNAPNAME"
 	         check_failure $? "Unable to take recursive snapshots of $fs@$SNAPNAME."
 	
 	    else
 	         destroy_older_snapshots $fs $KEEP $LABEL ""
 		 print_note "Taking snapshot $fs@$SNAPNAME"
-		 pfexec_zfs snapshot "$fs@$SNAPNAME"
+		 pfexec_zfs snapshot -o com.sun:auto-snapshot-desc="$EVENT" ${SNAPSHOT_DESC} "$fs@$SNAPNAME"
 		 check_failure $? "Unable to take snapshot $fs@$SNAPNAME."
 	    fi
 
@@ -882,8 +882,11 @@ function get_userprop_datasets {
                 	fi
         	fi
 	done
+	
+	export SINGLE_LIST
+	rm $ALL
+	rm $EXCLUDE
 
-	# return immediately if no datasets were selected
 	if [ -z "${RECURSIVE_LIST}" ] ; then
 		return
 	fi
@@ -892,10 +895,6 @@ function get_userprop_datasets {
 	print_note "Narrowed list of datasets to recursively snapshot is"
 	print_note "$FINAL_RECURSIVE_LIST"
 	export RECURSIVE_LIST="$FINAL_RECURSIVE_LIST"
-	export SINGLE_LIST
-
-	rm $ALL
-	rm $EXCLUDE
 }
 
 # Determine if a pool is currently being scrubbed or resilvered.
@@ -1031,6 +1030,7 @@ case "$1" in
 # executing this script, and do the job of taking snapshots.
 *)
 	SMF_FMRI=$1
+	EVENT="$2"
 	# are we being called with the correct argument (an FMRI) ?
 
 	case $SMF_FMRI in
@@ -1041,7 +1041,7 @@ case "$1" in
 			    print_log "$TTYOUTPUT"
 			fi
 
-			TTYOUTPUT=$(take_snapshot $SMF_FMRI 2>&1)
+			TTYOUTPUT=$(take_snapshot $SMF_FMRI "$EVENT" 2>&1)
 			if [ $? -eq 0 ] ; then
 			    result=$SMF_EXIT_OK
 			else
@@ -1056,7 +1056,7 @@ case "$1" in
 			# not logging these messages - we're assuming a curious
 			# user has run the script from the command line.
 			echo "Usage from SMF : zfs-auto-snapshot [start | stop]"
-			echo "Usage from cron: zfs-auto-snapshot svc:/system/filesystem/zfs/auto-snapshot:instance"
+			echo "Usage from cron: zfs-auto-snapshot svc:/system/filesystem/zfs/auto-snapshot:instance <event>"
 			result=$SMF_EXIT_ERR_FATAL
 			;;
 		esac			

@@ -453,13 +453,74 @@
 	  <propval name="avoidscrub" type="boolean" value="true"
 		   override="false"/>
 
-	  <propval name="sep" type="astring" value="true"
+	  <propval name="sep" type="astring" value="_"
 		   override="true"/>
 	  <propval name="auto-include" type="boolean" value="true" override="true"/>
 
 	</property_group>
 
 	</instance>
+
+
+        <!-- This instance takes snapshots on events, rather than
+	     being called from cron. Events are tagged by a string
+	     argument to the method script. Filesystems marked with
+             the ZFS User Property com.sun:auto-snapshot:event=true
+             are included in this schedule. We do not destroy event
+             driven snapshots, however that can be overridden in the
+	     SMF instance properties.
+        -->
+
+        <instance name='event' enabled='true' >
+
+        <property_group name='general' type='framework'>
+                <propval name='action_authorization' type='astring'
+                value='solaris.smf.manage.zfs-auto-snapshot' />
+                <propval name='value_authorization' type='astring'
+                value='solaris.smf.manage.zfs-auto-snapshot' />
+        </property_group>
+
+        <property_group name="zfs" type="application">
+
+          <propval name="fs-name" type="astring" value="//" 
+                   override="true"/>
+          <propval name="interval" type="astring" value="none"
+                   override="true"/>
+          <propval name="period" type="astring" value="0"
+                   override="true"/>
+          <propval name="offset" type="astring" value="0"
+                   override="true"/>
+          <propval name="keep" type="astring" value="all"
+                   override="true"/>
+          <propval name="snapshot-children" type="boolean" value="true"
+                   override="true"/>
+
+          <propval name="backup" type="astring" value="none"
+                   override="true"/>
+          <propval name="backup-save-cmd" type="astring" value="not set"
+                   override="true"/>
+          <propval name="backup-lock" type="astring" value="unlocked"
+                   override="true"/>
+
+          <propval name="label" type="astring" value="event"
+                   override="true"/>
+
+          <propval name="verbose" type="boolean" value="false"
+                   override="true"/>
+
+          <propval name="avoidscrub" type="boolean" value="true"
+                   override="false"/>
+
+          <propval name="sep" type="astring" value="_"
+                   override="true"/>
+          <propval name="auto-include" type="boolean" value="true" override="true"/>
+
+        </property_group>
+
+        </instance>
+
+
+
 
 	<stability value='Unstable' />
 
