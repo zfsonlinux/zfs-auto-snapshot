@@ -959,7 +959,7 @@ function auto_include {
 	for pool in ${FIRSTRUN_POOLS} ; do
 		# This is the first time the service has run on this pool,
 		# set appropriate zfs user properties on it
-		$PFZFS set com.sun:auto-snapshot=true $pool
+		pfexec_zfs set com.sun:auto-snapshot=true $pool
 	done
 
 	# check for swap devices using zvols. 
@@ -967,7 +967,7 @@ function auto_include {
 	SWAP=$(swap -l | grep "/dev/zvol/dsk/" | awk '{print $1}')
 	SWAPVOLS=""
 	for swap in $SWAP ; do
-		SWAPVOLS="$SWAPVOLS $(echo $swap | sed -e 's#/dev/zvol/dsk/##')"
+		SWAPVOLS="$SWAPVOLS	$(echo $swap | sed -e 's#/dev/zvol/dsk/##')"
 	done
 
 	# can't run dumpadm as a non-root user, so check for dumpadm.conf
