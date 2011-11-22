@@ -1,0 +1,16 @@
+Source: zfs-auto-snapshot
+Section: admin
+Priority: extra
+Maintainer: Darik Horn <dajhorn@vanadac.com>
+Build-Depends: debhelper (>= 7.4)
+Standards-Version: 3.8.4
+Homepage: http://www.zfsonlinux.org/
+Vcs-Git: git://github.com/dajhorn/zfs-auto-snapshot.git
+Vcs-Browser: https://github.com/dajhorn/zfs-auto-snapshot/
+
+Package: zfs-auto-snapshot
+Architecture: all
+Depends: ${misc:Depends}, cron, zfsutils
+Description: ZFS Automatic Snapshot Service
+ Automatically create and destroy ZFS snapshots on an hourly, daily, weekly
+ and monthly schedule.
