@@ -508,4 +508,5 @@ done
 print_log notice "@$SNAPSHOT_NAME, \
 $SNAPSHOT_COUNT created, $DESTRUCTION_COUNT destroyed, $WARNING_COUNT warnings."
 
+exit 0
 # }
