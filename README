@@ -1,0 +1,4 @@
+An alternative implementation of the zfs-auto-snapshot service for Linux.
+
+This program is a posixly correct bourne shell script.  It depends only on
+the zfs utilities and cron, and can run in the dash shell.

@@ -1,0 +1,8 @@
+PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+OPTIONS="--quiet --syslog"
+
+* */4 * * * root zfs-auto-snapshot $OPTIONS --label=frequent --keep=4  //
+@hourly     root zfs-auto-snapshot $OPTIONS --label=hourly   --keep=24 //
+@daily      root zfs-auto-snapshot $OPTIONS --label=daily    --keep=31 //
+@weekly     root zfs-auto-snapshot $OPTIONS --label=weekly   --keep=4  //
+@monthly    root zfs-auto-snapshot $OPTIONS --label=monthly  --keep=12 //
