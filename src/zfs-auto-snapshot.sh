@@ -136,7 +136,7 @@ GETOPT=$(getopt \
   --longoptions=default-exclude,dry-run,skip-scrub,recursive \
   --longoptions=keep:,label:,prefix:,sep: \
   --longoptions=debug,help,quiet,syslog,verbose \
-  --options=dnshl:k:rs:gv \
+  --options=dnshl:k:rs:qgv \
   -- "$@" ) \
   || exit 1
 
