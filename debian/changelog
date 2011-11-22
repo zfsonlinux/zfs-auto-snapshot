@@ -1,12 +1,9 @@
-zfs-auto-snapshot (1.0.1-0ubuntu1) unstable; urgency=low
+zfs-auto-snapshot (1.0.3-0ubuntu1) unstable; urgency=low
 
+  * Add -q to the getopt list of short options.
+  * Add an explicit `exit 0` to the end of the script.
+  * Add gbp.conf file for git-buildpackage.
   * Expand the options variable in the cron part file.
-
- -- Darik Horn <dajhorn@vanadac.com>  Mon, 21 Nov 2011 20:56:17 -0600
-
-zfs-auto-snapshot (1.0.0-0ubuntu1) unstable; urgency=low
-
-  * Initial release.
   * Initial debian packaging.
 
- -- Darik Horn <dajhorn@vanadac.com>  Mon, 21 Nov 2011 20:45:49 -0600
+ -- Darik Horn <dajhorn@vanadac.com>  Mon, 21 Nov 2011 21:52:11 -0600
