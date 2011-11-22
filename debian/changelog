@@ -1,0 +1,6 @@
+zfs-auto-snapshot (1.0.0-0ubuntu1) unstable; urgency=low
+
+  * Initial release.
+  * Initial debian packaging.
+
+ -- Darik Horn <dajhorn@vanadac.com>  Mon, 21 Nov 2011 20:01:19 -0600
