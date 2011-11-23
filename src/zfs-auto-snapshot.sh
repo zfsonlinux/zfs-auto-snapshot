@@ -194,7 +194,7 @@ GETOPT=$(getopt \
   --longoptions=default-exclude,dry-run,skip-scrub,recursive \
   --longoptions=keep:,label:,prefix:,sep: \
   --longoptions=debug,help,quiet,syslog,verbose \
-  --options=dnshl:k:rs:qgv \
+  --options=dnshl:k:p:rs:qgv \
   -- "$@" ) \
   || exit 1
 
@@ -239,8 +239,19 @@ do
 			shift 2
 			;;
 		(-p|--prefix)
-			# @TODO: Parameter validation. See --sep below for the regex.
 			opt_prefix="$2"
+			while test "${#opt_prefix}" -gt '0'
+			do
+				case $opt_prefix in
+					([![:alnum:]_-.:\ ]*)
+						print_log error "The $1 parameter must be alphanumeric."
+						exit 44
+						;;
+				esac
+				opt_prefix="${opt_prefix#?}"
+			done
+			opt_prefix="$2"
+			shift 2
 			;;
 		(-q|--quiet)
 			opt_debug=''
