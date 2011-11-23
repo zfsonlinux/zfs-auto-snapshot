@@ -28,6 +28,7 @@ opt_backup_full=''
 opt_backup_incremental=''
 opt_default_exclude=''
 opt_dry_run=''
+opt_event='-'
 opt_keep=''
 opt_label=''
 opt_prefix='zfs-auto-snap'
@@ -38,12 +39,21 @@ opt_syslog=''
 opt_skip_scrub=''
 opt_verbose=''
 
+# Global summary statistics.
+DESTRUCTION_COUNT='0'
+SNAPSHOT_COUNT='0'
+WARNING_COUNT='0'
+
+# Other global variables.
+SNAPSHOTS_OLD=''
+
 
 print_usage ()
 {
 	echo "Usage: $0 [options] [-l label] <'//' | name [name...]>
   --default-exclude  Exclude objects if com.sun:auto-snapshot is unset.
   -d, --debug        Print debugging messages.
+  -e, --event=EVENT  Set the com.sun:auto-snapshot-desc property to EVENT.
   -n, --dry-run      Print actions without actually doing anything.
   -s, --skip-scrub   Do not snapshot filesystems in scrubbing pools.
   -h, --help         Print this usage message.
@@ -108,7 +118,7 @@ print_log () # level, message, ...
 }
 
 
-do_run ()
+do_run () # [argv]
 {
 	if [ -n "$opt_dry_run" ]
 	then
@@ -117,7 +127,7 @@ do_run ()
 	else
 		eval $*
 		RC="$?"
-		if [ "$RC" -eq 0 ]
+		if [ "$RC" -eq '0' ]
 		then
 			print_log debug "$*"
 		else
@@ -127,40 +137,101 @@ do_run ()
 	return "$RC"
 }
 
+
+do_snapshots () # properties, flags, snapname, oldglob, [targets...]
+{
+	local PROPS="$1"
+	local FLAGS="$2"
+	local NAME="$3"
+	local GLOB="$4"
+	local TARGETS="$5"
+	local KEEP=''
+
+	# global DESTRUCTION_COUNT
+	# global SNAPSHOT_COUNT
+	# global WARNING_COUNT
+	# global SNAPSHOTS_OLD
+
+	for ii in $TARGETS
+	do
+		if do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'" 
+		then
+			SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT + 1 ))
+		else
+			WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
+			continue
+		fi 
+
+		# Retain at most $opt_keep number of old snapshots of this filesystem,
+		# including the one that was just recently created.
+		test -z "$opt_keep" && continue
+		KEEP="$opt_keep"
+
+		# ASSERT: The old snapshot list is sorted by increasing age.
+		for jj in $SNAPSHOTS_OLD
+		do
+			# Check whether this is an old snapshot of the filesystem.
+			if [ -z "${jj#$ii@$GLOB}" ]
+			then
+				KEEP=$(( $KEEP - 1 ))
+				if [ "$KEEP" -le '0' ]
+				then
+					if do_run "zfs destroy $FLAGS '$jj'" 
+					then
+						DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
+					else
+						WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
+					fi
+				fi
+			fi
+		done
+	done
+}
+
+
 # main ()
 # {
 
-DATE=$(date +%F-%H%M)
-
 GETOPT=$(getopt \
   --longoptions=default-exclude,dry-run,skip-scrub,recursive \
-  --longoptions=keep:,label:,prefix:,sep: \
+  --longoptions=event:,keep:,label:,prefix:,sep: \
   --longoptions=debug,help,quiet,syslog,verbose \
-  --options=dnshl:k:rs:qgv \
+  --options=dnshe:l:k:p:rs:qgv \
   -- "$@" ) \
-  || exit 1
+  || exit 128
 
 eval set -- "$GETOPT"
 
-while [ "$#" -gt 0 ]
+while [ "$#" -gt '0' ]
 do
 	case "$1" in
 		(-d|--debug)
-			opt_debug=1
+			opt_debug='1'
 			opt_quiet=''
-			opt_verbose=1
+			opt_verbose='1'
 			shift 1
 			;;
 		(--default-exclude)
 			opt_default_exclude='1'
 			shift 1
 			;;
+		(-e|--event)
+			if [ "${#2}" -gt '1024' ]
+			then
+				print_log error "The $1 parameter must be less than 1025 characters."
+				exit 139
+			elif [ "${#2}" -gt '0' ]
+			then
+				opt_event="$2"
+			fi
+			shift 2
+			;;
 		(-n|--dry-run)
 			opt_dry_run='1'
 			shift 1
 			;;
 		(-s|--skip-scrub)
-			opt_skip_scrub=1
+			opt_skip_scrub='1'
 			shift 1
 			;;
 		(-h|--help)
@@ -168,10 +239,10 @@ do
 			exit 0
 			;;
 		(-k|--keep)
-			if ! test "$2" -gt 0 2>/dev/null
+			if ! test "$2" -gt '0' 2>/dev/null
 			then
 				print_log error "The $1 parameter must be a positive integer."
-				exit 2
+				exit 129
 			fi
 			opt_keep="$2"
 			shift 2
@@ -181,8 +252,19 @@ do
 			shift 2
 			;;
 		(-p|--prefix)
-			# @TODO: Parameter validation. See --sep below for the regex.
 			opt_prefix="$2"
+			while test "${#opt_prefix}" -gt '0'
+			do
+				case $opt_prefix in
+					([![:alnum:]_-.:\ ]*)
+						print_log error "The $1 parameter must be alphanumeric."
+						exit 130
+						;;
+				esac
+				opt_prefix="${opt_prefix#?}"
+			done
+			opt_prefix="$2"
+			shift 2
 			;;
 		(-q|--quiet)
 			opt_debug=''
@@ -191,7 +273,7 @@ do
 			shift 1
 			;;
 		(-r|--recursive)
-			opt_recursive=1
+			opt_recursive='1'
 			shift 1
 			;;
 		(--sep)
@@ -201,23 +283,23 @@ do
 					;;
 				('')
 					print_log error "The $1 parameter must be non-empty."
-					exit 3
+					exit 131
 					;;
 				(*)
 					print_log error "The $1 parameter must be one alphanumeric character."
-					exit 4
-				;;
+					exit 132
+					;;
 			esac
 			opt_sep="$2"
 			shift 2
 			;;
 		(-g|--syslog)
-			opt_syslog=1
+			opt_syslog='1'
 			shift 1
 			;;
 		(-v|--verbose)
 			opt_quiet=''
-			opt_verbose=1
+			opt_verbose='1'
 			shift 1
 			;;
 		(--)
@@ -227,10 +309,10 @@ do
 	esac
 done
 
-if [ "$#" -eq 0 ]
+if [ "$#" -eq '0' ]
 then
 	print_log error "The filesystem argument list is empty."
-	exit 5
+	exit 133
 fi 
 
 # Count the number of times '//' appears on the command line.
@@ -240,10 +322,10 @@ do
 	test "$ii" = '//' && SLASHIES=$(( $SLASHIES + 1 ))
 done
 
-if [ "$#" -gt 1 -a "$SLASHIES" -gt 0 ]
+if [ "$#" -gt '1' -a "$SLASHIES" -gt '0' ]
 then
 	print_log error "The // must be the only argument if it is given."
-	exit 6
+	exit 134
 fi
 
 # These are the only times that `zpool status` or `zfs list` are invoked, so
@@ -251,14 +333,14 @@ fi
 # Solaris implementation.
 
 ZPOOL_STATUS=$(env LC_ALL=C zpool status 2>&1 ) \
-  || { print_log error "zpool status $?: $ZPOOL_STATUS"; exit 7; }
+  || { print_log error "zpool status $?: $ZPOOL_STATUS"; exit 135; }
 
 ZFS_LIST=$(env LC_ALL=C zfs list -H -t filesystem,volume -s name \
   -o name,com.sun:auto-snapshot,com.sun:auto-snapshot:"$opt_label") \
-  || { print_log error "zfs list $?: $ZFS_LIST"; exit 8; }
+  || { print_log error "zfs list $?: $ZFS_LIST"; exit 136; }
 
 SNAPSHOTS_OLD=$(env LC_ALL=C zfs list -H -t snapshot -S creation -o name) \
-  || { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 9; }
+  || { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
 
 
 # Verify that each argument is a filesystem or volume.
@@ -272,7 +354,7 @@ do
 	$ZFS_LIST
 	HERE
 	print_log error "$ii is not a ZFS filesystem or volume."
-	exit 10
+	exit 138
 done
 
 # Get a list of pools that are being scrubbed.
@@ -405,20 +487,19 @@ do
 	TARGETS_RECURSIVE="${TARGETS_RECURSIVE:+$TARGETS_RECURSIVE	}$ii" # nb: \t
 done
 
-# Summary statistics.
-DESTRUCTION_COUNT='0'
-SNAPSHOT_COUNT='0'
-WARNING_COUNT='0'
+# Linux lacks SMF and the notion of an FMRI event, but always set this property
+# because the SUNW program does. The dash character is the default.
+SNAPPROP="-o com.sun:auto-snapshot-desc='$opt_event'"
 
-# Linux lacks SMF and the notion of an FMRI event.
-FMRI_EVENT='-'
+# ISO style date; fifteen characters: YYYY-MM-DD-HHMM
+# On Solaris %H%M expands to 12h34.
+DATE=$(date +%F-%H%M)
 
-# Create the snapshot using these arguments.
-SNAPSHOT_PROPERTIES="-o com.sun:auto-snapshot-desc='$FMRI_EVENT'"
-SNAPSHOT_NAME="$opt_prefix${opt_label:+$opt_sep$opt_label-$DATE}"
+# The snapshot name after the @ symbol.
+SNAPNAME="$opt_prefix${opt_label:+$opt_sep$opt_label-$DATE}"
 
-# The expression for old snapshots.                 -YYYY-MM-DD-HHMM
-SNAPSHOT_MATCH="$opt_prefix${opt_label:+?$opt_label}????????????????"
+# The expression for matching old snapshots.  -YYYY-MM-DD-HHMM
+SNAPGLOB="$opt_prefix${opt_label:+?$opt_label}????????????????"
 
 test -n "$TARGETS_REGULAR" \
   && print_log info "Doing regular snapshots of $TARGETS_REGULAR"
@@ -429,84 +510,13 @@ test -n "$TARGETS_RECURSIVE" \
 test -n "$opt_dry_run" \
   && print_log info "Doing a dry run. Not running these commands..."
 
+do_snapshots "$SNAPPROP" ""   "$SNAPNAME" "$SNAPGLOB" "$TARGETS_REGULAR"
+do_snapshots "$SNAPPROP" "-r" "$SNAPNAME" "$SNAPGLOB" "$TARGETS_RECURSIVE"
 
-for ii in $TARGETS_REGULAR
-do
-	if do_run "zfs snapshot $SNAPSHOT_PROPERTIES '$ii@$SNAPSHOT_NAME'"
-	then
-		SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT +1 ))
-	else
-		WARNING_COUNT=$(( $WARNING_COUNT +1 ))
-		continue
-	fi
-
-	# Retain at most $opt_keep number of old snapshots of this filesystem,
-	# including the one that was just recently created.
-	if [ -z "$opt_keep" ]
-	then
-		continue
-	fi
-	KEEP="$opt_keep"
-
-	for jj in $SNAPSHOTS_OLD
-	do
-		# Check whether this is an old snapshot of the filesystem.
-		if [ -z "${jj#$ii@$SNAPSHOT_MATCH}" ]
-		then
-			KEEP=$(( $KEEP - 1 ))
-			if [ "$KEEP" -le 0 ]
-			then
-				if do_run "zfs destroy '$jj'"
-				then
-					DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT +1 ))
-				else
-					WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
-				fi
-			fi
-		fi
-	done
-done
-
-for ii in $TARGETS_RECURSIVE
-do
-	if do_run "zfs snapshot $SNAPSHOT_PROPERTIES -r '$ii@$SNAPSHOT_NAME'" 
-	then
-		SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT +1 ))
-	else
-		WARNING_COUNT=$(( $WARNING_COUNT +1 ))
-		continue
-	fi 
-
-	# Retain at most $opt_keep number of old snapshots of this filesystem,
-	# including the one that was just recently created.
-	if [ -z "$opt_keep" ]
-	then
-		continue
-	fi
-	KEEP="$opt_keep"
-
-	# ASSERT: The old snapshot list is sorted by increasing age.
-	for jj in $SNAPSHOTS_OLD
-	do
-		# Check whether this is an old snapshot of the filesystem.
-		if [ -z "${jj#$ii@$SNAPSHOT_MATCH}" ]
-		then
-			KEEP=$(( $KEEP - 1 ))
-			if [ "$KEEP" -le 0 ]
-			then
-				if do_run "zfs destroy -r '$jj'" 
-				then
-					DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT +1 ))
-				else
-					WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
-				fi
-			fi
-		fi
-	done
-done
-
-print_log notice "@$SNAPSHOT_NAME, \
-$SNAPSHOT_COUNT created, $DESTRUCTION_COUNT destroyed, $WARNING_COUNT warnings."
+print_log notice "@$SNAPNAME," \
+  "$SNAPSHOT_COUNT created," \
+  "$DESTRUCTION_COUNT destroyed," \
+  "$WARNING_COUNT warnings."
 
 exit 0
 # }
