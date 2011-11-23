@@ -28,6 +28,7 @@ opt_backup_full=''
 opt_backup_incremental=''
 opt_default_exclude=''
 opt_dry_run=''
+opt_event='-'
 opt_keep=''
 opt_label=''
 opt_prefix='zfs-auto-snap'
@@ -52,6 +53,7 @@ print_usage ()
 	echo "Usage: $0 [options] [-l label] <'//' | name [name...]>
   --default-exclude  Exclude objects if com.sun:auto-snapshot is unset.
   -d, --debug        Print debugging messages.
+  -e, --event=EVENT  Set the com.sun:auto-snapshot-desc property to EVENT.
   -n, --dry-run      Print actions without actually doing anything.
   -s, --skip-scrub   Do not snapshot filesystems in scrubbing pools.
   -h, --help         Print this usage message.
@@ -152,7 +154,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 
 	for ii in $TARGETS
 	do
-		if do_run "zfs snapshot $PROPERTIES $FLAGS '$ii@$NAME'" 
+		if do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'" 
 		then
 			SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT + 1 ))
 		else
@@ -192,9 +194,9 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 
 GETOPT=$(getopt \
   --longoptions=default-exclude,dry-run,skip-scrub,recursive \
-  --longoptions=keep:,label:,prefix:,sep: \
+  --longoptions=event:,keep:,label:,prefix:,sep: \
   --longoptions=debug,help,quiet,syslog,verbose \
-  --options=dnshl:k:p:rs:qgv \
+  --options=dnshe:l:k:p:rs:qgv \
   -- "$@" ) \
   || exit 128
 
@@ -212,6 +214,17 @@ do
 		(--default-exclude)
 			opt_default_exclude='1'
 			shift 1
+			;;
+		(-e|--event)
+			if [ "${#2}" -gt '1024' ]
+			then
+				print_log error "The $1 parameter must be less than 1025 characters."
+				exit 139
+			elif [ "${#2}" -gt '0' ]
+			then
+				opt_event="$2"
+			fi
+			shift 2
 			;;
 		(-n|--dry-run)
 			opt_dry_run='1'
@@ -474,12 +487,9 @@ do
 	TARGETS_RECURSIVE="${TARGETS_RECURSIVE:+$TARGETS_RECURSIVE	}$ii" # nb: \t
 done
 
-
-# Linux lacks SMF and the notion of an FMRI event.
-FMRI_EVENT='-'
-
-# Set this property because the SUNW program does.
-SNAPPROP="-o com.sun:auto-snapshot-desc='$FMRI_EVENT'"
+# Linux lacks SMF and the notion of an FMRI event, but always set this property
+# because the SUNW program does. The dash character is the default.
+SNAPPROP="-o com.sun:auto-snapshot-desc='$opt_event'"
 
 # ISO style date; fifteen characters: YYYY-MM-DD-HHMM
 # On Solaris %H%M expands to 12h34.
