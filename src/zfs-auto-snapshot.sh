@@ -43,7 +43,7 @@ DESTRUCTION_COUNT='0'
 SNAPSHOT_COUNT='0'
 WARNING_COUNT='0'
 
-# Global variables.
+# Other global variables.
 SNAPSHOTS_OLD=''
 
 
@@ -125,7 +125,7 @@ do_run () # [argv]
 	else
 		eval $*
 		RC="$?"
-		if [ "$RC" -eq 0 ]
+		if [ "$RC" -eq '0' ]
 		then
 			print_log debug "$*"
 		else
@@ -154,9 +154,9 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 	do
 		if do_run "zfs snapshot $PROPERTIES $FLAGS '$ii@$NAME'" 
 		then
-			SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT +1 ))
+			SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT + 1 ))
 		else
-			WARNING_COUNT=$(( $WARNING_COUNT +1 ))
+			WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
 			continue
 		fi 
 
@@ -172,11 +172,11 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 			if [ -z "${jj#$ii@$GLOB}" ]
 			then
 				KEEP=$(( $KEEP - 1 ))
-				if [ "$KEEP" -le 0 ]
+				if [ "$KEEP" -le '0' ]
 				then
 					if do_run "zfs destroy $FLAGS '$jj'" 
 					then
-						DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT +1 ))
+						DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
 					else
 						WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
 					fi
@@ -200,13 +200,13 @@ GETOPT=$(getopt \
 
 eval set -- "$GETOPT"
 
-while [ "$#" -gt 0 ]
+while [ "$#" -gt '0' ]
 do
 	case "$1" in
 		(-d|--debug)
-			opt_debug=1
+			opt_debug='1'
 			opt_quiet=''
-			opt_verbose=1
+			opt_verbose='1'
 			shift 1
 			;;
 		(--default-exclude)
@@ -218,7 +218,7 @@ do
 			shift 1
 			;;
 		(-s|--skip-scrub)
-			opt_skip_scrub=1
+			opt_skip_scrub='1'
 			shift 1
 			;;
 		(-h|--help)
@@ -226,7 +226,7 @@ do
 			exit 0
 			;;
 		(-k|--keep)
-			if ! test "$2" -gt 0 2>/dev/null
+			if ! test "$2" -gt '0' 2>/dev/null
 			then
 				print_log error "The $1 parameter must be a positive integer."
 				exit 2
@@ -249,7 +249,7 @@ do
 			shift 1
 			;;
 		(-r|--recursive)
-			opt_recursive=1
+			opt_recursive='1'
 			shift 1
 			;;
 		(--sep)
@@ -264,18 +264,18 @@ do
 				(*)
 					print_log error "The $1 parameter must be one alphanumeric character."
 					exit 4
-				;;
+					;;
 			esac
 			opt_sep="$2"
 			shift 2
 			;;
 		(-g|--syslog)
-			opt_syslog=1
+			opt_syslog='1'
 			shift 1
 			;;
 		(-v|--verbose)
 			opt_quiet=''
-			opt_verbose=1
+			opt_verbose='1'
 			shift 1
 			;;
 		(--)
@@ -285,7 +285,7 @@ do
 	esac
 done
 
-if [ "$#" -eq 0 ]
+if [ "$#" -eq '0' ]
 then
 	print_log error "The filesystem argument list is empty."
 	exit 5
@@ -298,7 +298,7 @@ do
 	test "$ii" = '//' && SLASHIES=$(( $SLASHIES + 1 ))
 done
 
-if [ "$#" -gt 1 -a "$SLASHIES" -gt 0 ]
+if [ "$#" -gt '1' -a "$SLASHIES" -gt '0' ]
 then
 	print_log error "The // must be the only argument if it is given."
 	exit 6
