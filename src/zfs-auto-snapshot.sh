@@ -196,7 +196,7 @@ GETOPT=$(getopt \
   --longoptions=debug,help,quiet,syslog,verbose \
   --options=dnshl:k:p:rs:qgv \
   -- "$@" ) \
-  || exit 1
+  || exit 128
 
 eval set -- "$GETOPT"
 
@@ -229,7 +229,7 @@ do
 			if ! test "$2" -gt '0' 2>/dev/null
 			then
 				print_log error "The $1 parameter must be a positive integer."
-				exit 2
+				exit 129
 			fi
 			opt_keep="$2"
 			shift 2
@@ -245,7 +245,7 @@ do
 				case $opt_prefix in
 					([![:alnum:]_-.:\ ]*)
 						print_log error "The $1 parameter must be alphanumeric."
-						exit 44
+						exit 130
 						;;
 				esac
 				opt_prefix="${opt_prefix#?}"
@@ -270,11 +270,11 @@ do
 					;;
 				('')
 					print_log error "The $1 parameter must be non-empty."
-					exit 3
+					exit 131
 					;;
 				(*)
 					print_log error "The $1 parameter must be one alphanumeric character."
-					exit 4
+					exit 132
 					;;
 			esac
 			opt_sep="$2"
@@ -299,7 +299,7 @@ done
 if [ "$#" -eq '0' ]
 then
 	print_log error "The filesystem argument list is empty."
-	exit 5
+	exit 133
 fi 
 
 # Count the number of times '//' appears on the command line.
@@ -312,7 +312,7 @@ done
 if [ "$#" -gt '1' -a "$SLASHIES" -gt '0' ]
 then
 	print_log error "The // must be the only argument if it is given."
-	exit 6
+	exit 134
 fi
 
 # These are the only times that `zpool status` or `zfs list` are invoked, so
@@ -320,14 +320,14 @@ fi
 # Solaris implementation.
 
 ZPOOL_STATUS=$(env LC_ALL=C zpool status 2>&1 ) \
-  || { print_log error "zpool status $?: $ZPOOL_STATUS"; exit 7; }
+  || { print_log error "zpool status $?: $ZPOOL_STATUS"; exit 135; }
 
 ZFS_LIST=$(env LC_ALL=C zfs list -H -t filesystem,volume -s name \
   -o name,com.sun:auto-snapshot,com.sun:auto-snapshot:"$opt_label") \
-  || { print_log error "zfs list $?: $ZFS_LIST"; exit 8; }
+  || { print_log error "zfs list $?: $ZFS_LIST"; exit 136; }
 
 SNAPSHOTS_OLD=$(env LC_ALL=C zfs list -H -t snapshot -S creation -o name) \
-  || { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 9; }
+  || { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
 
 
 # Verify that each argument is a filesystem or volume.
@@ -341,7 +341,7 @@ do
 	$ZFS_LIST
 	HERE
 	print_log error "$ii is not a ZFS filesystem or volume."
-	exit 10
+	exit 138
 done
 
 # Get a list of pools that are being scrubbed.
