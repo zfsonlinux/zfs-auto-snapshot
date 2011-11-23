@@ -38,6 +38,14 @@ opt_syslog=''
 opt_skip_scrub=''
 opt_verbose=''
 
+# Global summary statistics.
+DESTRUCTION_COUNT='0'
+SNAPSHOT_COUNT='0'
+WARNING_COUNT='0'
+
+# Global variables.
+SNAPSHOTS_OLD=''
+
 
 print_usage ()
 {
@@ -108,7 +116,7 @@ print_log () # level, message, ...
 }
 
 
-do_run ()
+do_run () # [argv]
 {
 	if [ -n "$opt_dry_run" ]
 	then
@@ -127,10 +135,60 @@ do_run ()
 	return "$RC"
 }
 
+
+do_snapshots () # properties, flags, snapname, oldglob, [targets...]
+{
+	local PROPS="$1"
+	local FLAGS="$2"
+	local NAME="$3"
+	local GLOB="$4"
+	local TARGETS="$5"
+	local KEEP=''
+
+	# global DESTRUCTION_COUNT
+	# global SNAPSHOT_COUNT
+	# global WARNING_COUNT
+	# global SNAPSHOTS_OLD
+
+	for ii in $TARGETS
+	do
+		if do_run "zfs snapshot $PROPERTIES $FLAGS '$ii@$NAME'" 
+		then
+			SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT +1 ))
+		else
+			WARNING_COUNT=$(( $WARNING_COUNT +1 ))
+			continue
+		fi 
+
+		# Retain at most $opt_keep number of old snapshots of this filesystem,
+		# including the one that was just recently created.
+		test -z "$opt_keep" && continue
+		KEEP="$opt_keep"
+
+		# ASSERT: The old snapshot list is sorted by increasing age.
+		for jj in $SNAPSHOTS_OLD
+		do
+			# Check whether this is an old snapshot of the filesystem.
+			if [ -z "${jj#$ii@$GLOB}" ]
+			then
+				KEEP=$(( $KEEP - 1 ))
+				if [ "$KEEP" -le 0 ]
+				then
+					if do_run "zfs destroy $FLAGS '$jj'" 
+					then
+						DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT +1 ))
+					else
+						WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
+					fi
+				fi
+			fi
+		done
+	done
+}
+
+
 # main ()
 # {
-
-DATE=$(date +%F-%H%M)
 
 GETOPT=$(getopt \
   --longoptions=default-exclude,dry-run,skip-scrub,recursive \
@@ -405,20 +463,22 @@ do
 	TARGETS_RECURSIVE="${TARGETS_RECURSIVE:+$TARGETS_RECURSIVE	}$ii" # nb: \t
 done
 
-# Summary statistics.
-DESTRUCTION_COUNT='0'
-SNAPSHOT_COUNT='0'
-WARNING_COUNT='0'
 
 # Linux lacks SMF and the notion of an FMRI event.
 FMRI_EVENT='-'
 
-# Create the snapshot using these arguments.
-SNAPSHOT_PROPERTIES="-o com.sun:auto-snapshot-desc='$FMRI_EVENT'"
-SNAPSHOT_NAME="$opt_prefix${opt_label:+$opt_sep$opt_label-$DATE}"
+# Set this property because the SUNW program does.
+SNAPPROP="-o com.sun:auto-snapshot-desc='$FMRI_EVENT'"
 
-# The expression for old snapshots.                 -YYYY-MM-DD-HHMM
-SNAPSHOT_MATCH="$opt_prefix${opt_label:+?$opt_label}????????????????"
+# ISO style date; fifteen characters: YYYY-MM-DD-HHMM
+# On Solaris %H%M expands to 12h34.
+DATE=$(date +%F-%H%M)
+
+# The snapshot name after the @ symbol.
+SNAPNAME="$opt_prefix${opt_label:+$opt_sep$opt_label-$DATE}"
+
+# The expression for matching old snapshots.  -YYYY-MM-DD-HHMM
+SNAPGLOB="$opt_prefix${opt_label:+?$opt_label}????????????????"
 
 test -n "$TARGETS_REGULAR" \
   && print_log info "Doing regular snapshots of $TARGETS_REGULAR"
@@ -429,84 +489,13 @@ test -n "$TARGETS_RECURSIVE" \
 test -n "$opt_dry_run" \
   && print_log info "Doing a dry run. Not running these commands..."
 
+do_snapshots "$SNAPPROP" ""   "$SNAPNAME" "$SNAPGLOB" "$TARGETS_REGULAR"
+do_snapshots "$SNAPPROP" "-r" "$SNAPNAME" "$SNAPGLOB" "$TARGETS_RECURSIVE"
 
-for ii in $TARGETS_REGULAR
-do
-	if do_run "zfs snapshot $SNAPSHOT_PROPERTIES '$ii@$SNAPSHOT_NAME'"
-	then
-		SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT +1 ))
-	else
-		WARNING_COUNT=$(( $WARNING_COUNT +1 ))
-		continue
-	fi
-
-	# Retain at most $opt_keep number of old snapshots of this filesystem,
-	# including the one that was just recently created.
-	if [ -z "$opt_keep" ]
-	then
-		continue
-	fi
-	KEEP="$opt_keep"
-
-	for jj in $SNAPSHOTS_OLD
-	do
-		# Check whether this is an old snapshot of the filesystem.
-		if [ -z "${jj#$ii@$SNAPSHOT_MATCH}" ]
-		then
-			KEEP=$(( $KEEP - 1 ))
-			if [ "$KEEP" -le 0 ]
-			then
-				if do_run "zfs destroy '$jj'"
-				then
-					DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT +1 ))
-				else
-					WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
-				fi
-			fi
-		fi
-	done
-done
-
-for ii in $TARGETS_RECURSIVE
-do
-	if do_run "zfs snapshot $SNAPSHOT_PROPERTIES -r '$ii@$SNAPSHOT_NAME'" 
-	then
-		SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT +1 ))
-	else
-		WARNING_COUNT=$(( $WARNING_COUNT +1 ))
-		continue
-	fi 
-
-	# Retain at most $opt_keep number of old snapshots of this filesystem,
-	# including the one that was just recently created.
-	if [ -z "$opt_keep" ]
-	then
-		continue
-	fi
-	KEEP="$opt_keep"
-
-	# ASSERT: The old snapshot list is sorted by increasing age.
-	for jj in $SNAPSHOTS_OLD
-	do
-		# Check whether this is an old snapshot of the filesystem.
-		if [ -z "${jj#$ii@$SNAPSHOT_MATCH}" ]
-		then
-			KEEP=$(( $KEEP - 1 ))
-			if [ "$KEEP" -le 0 ]
-			then
-				if do_run "zfs destroy -r '$jj'" 
-				then
-					DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT +1 ))
-				else
-					WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
-				fi
-			fi
-		fi
-	done
-done
-
-print_log notice "@$SNAPSHOT_NAME, \
-$SNAPSHOT_COUNT created, $DESTRUCTION_COUNT destroyed, $WARNING_COUNT warnings."
+print_log notice "@$SNAPNAME," \
+  "$SNAPSHOT_COUNT created," \
+  "$DESTRUCTION_COUNT destroyed," \
+  "$WARNING_COUNT warnings."
 
 exit 0
 # }
