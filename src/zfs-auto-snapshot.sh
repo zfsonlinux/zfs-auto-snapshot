@@ -346,7 +346,7 @@ do
 	done
 
 	# Exclude objects in scrubbing pools if the --skip-scrub flag is set.
-	test -z "$opt_skip_scrub" && for jj in $ZPOOLS_SCRUBBING
+	test -n "$opt_skip_scrub" && for jj in $ZPOOLS_SCRUBBING
 	do
 		# Ibid regarding iii.
 		jjj="$jj/"
