@@ -1,3 +1,14 @@
+zfs-auto-snapshot (1.0.4-0ubuntu1) unstable; urgency=low
+
+  * Invert the --skip-scrub test.
+  * Fold the main loops into a do_snapshots function.
+  * Consistently quote literal strings.
+  * Implement --prefix parameter checking.
+  * Rebase exit codes to above 127.
+  * Implement the --event option for :auto-snap-desc.
+
+ -- Darik Horn <dajhorn@vanadac.com>  Wed, 23 Nov 2011 10:49:14 -0600
+
 zfs-auto-snapshot (1.0.3-0ubuntu1) unstable; urgency=low
 
   * Add -q to the getopt list of short options.
