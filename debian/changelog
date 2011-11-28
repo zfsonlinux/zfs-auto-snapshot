@@ -1,3 +1,10 @@
+zfs-auto-snapshot (1.0.6-0ubuntu1) unstable; urgency=low
+
+  * Remove redundant lines in the cron.d file.
+  * Fix the hourly-daily transposition in the Makefile.
+
+ -- Darik Horn <dajhorn@vanadac.com>  Mon, 28 Nov 2011 00:10:05 -0600
+
 zfs-auto-snapshot (1.0.5-0ubuntu1) unstable; urgency=low
 
   * Split the cron file for anacron compatibilty.
