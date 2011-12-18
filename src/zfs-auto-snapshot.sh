@@ -51,7 +51,7 @@ SNAPSHOTS_OLD=''
 print_usage ()
 {
 	echo "Usage: $0 [options] [-l label] <'//' | name [name...]>
-  --default-exclude  Exclude objects if com.sun:auto-snapshot is unset.
+  --default-exclude  Exclude datasets if com.sun:auto-snapshot is unset.
   -d, --debug        Print debugging messages.
   -e, --event=EVENT  Set the com.sun:auto-snapshot-desc property to EVENT.
   -n, --dry-run      Print actions without actually doing anything.
@@ -67,7 +67,7 @@ print_usage ()
   -g, --syslog       Write messages into the system log.
   -r, --recursive    Snapshot named filesystem and all descendants.
   -v, --verbose      Print info messages.
-      name           Filesystem and volume names, or '//' for all ZFS objects.
+      name           Filesystem and volume names, or '//' for all ZFS datasets.
 " 
 }
 
@@ -369,15 +369,15 @@ ZPOOLS_NOTREADY=$(echo "$ZFS_STATUS" | awk -F ': ' \
    $1 ~ /^ *state$/ && $2 !~ /ONLINE|DEGRADED/ { print pool } ' \
   | sort)
 
-# Get a list of objects for which snapshots are explicitly disabled.
+# Get a list of datasets for which snapshots are explicitly disabled.
 NOAUTO=$(echo "$ZFS_LIST" | awk -F '\t' \
   'tolower($2) ~ /false/ || tolower($3) ~ /false/ {print $1}')
 
-# If the --default-exclude flag is set, then exclude all objects that lack
+# If the --default-exclude flag is set, then exclude all datasets that lack
 # an explicit com.sun:auto-snapshot* property. Otherwise, include them.
 if [ -n "$opt_default_exclude" ]
 then
-	# Get a list of objects for which snapshots are explicitly enabled.
+	# Get a list of datasets for which snapshots are explicitly enabled.
 	CANDIDATES=$(echo "$ZFS_LIST" | awk -F '\t' \
 	  'tolower($2) ~ /true/ || tolower($3) ~ /true/ {print $1}')
 else
@@ -386,20 +386,20 @@ else
 	  'tolower($2) !~ /false/ && tolower($3) !~ /false/ {print $1}')
 fi
 
-# Initialize the list of objects that will get a recursive snapshot.
+# Initialize the list of datasets that will get a recursive snapshot.
 TARGETS_RECURSIVE=''
 
-# Initialize the list of objects that will get a non-recursive snapshot.
+# Initialize the list of datasets that will get a non-recursive snapshot.
 TARGETS_REGULAR=''
 
 for ii in $CANDIDATES
 do
-	# Qualify object names so variable globbing works properly.
+	# Qualify dataset names so variable globbing works properly.
 	# Suppose ii=tanker/foo and jj=tank sometime during the loop.
 	# Just testing "$ii" != ${ii#$jj} would incorrectly match.
 	iii="$ii/"
 
-	# Exclude objects that are not named on the command line.
+	# Exclude datasets that are not named on the command line.
 	IN_ARGS='0'
 	for jj in "$@"
 	do
@@ -413,13 +413,13 @@ do
 		continue
 	fi
 
-	# Exclude objects in pools that cannot do a snapshot.
+	# Exclude datasets in pools that cannot do a snapshot.
 	for jj in $ZPOOLS_NOTREADY
 	do
 		# Ibid regarding iii.
 		jjj="$jj/"
 
-		# Check whether the pool name is a prefix of the object name.
+		# Check whether the pool name is a prefix of the dataset name.
 		if [ "$iii" != "${iii#$jjj}" ]
 		then
 			print_log info "Excluding $ii because pool $jj is not ready."
@@ -427,13 +427,13 @@ do
 		fi
 	done
 
-	# Exclude objects in scrubbing pools if the --skip-scrub flag is set.
+	# Exclude datasets in scrubbing pools if the --skip-scrub flag is set.
 	test -n "$opt_skip_scrub" && for jj in $ZPOOLS_SCRUBBING
 	do
 		# Ibid regarding iii.
 		jjj="$jj/"
 
-		# Check whether the pool name is a prefix of the object name.
+		# Check whether the pool name is a prefix of the dataset name.
 		if [ "$iii" != "${iii#$jjj}" ]
 		then
 			print_log info "Excluding $ii because pool $jj is scrubbing."
@@ -449,14 +449,14 @@ do
 		# The --recusive switch only matters for non-wild arguments.
 		if [ -z "$opt_recursive" -a "$1" != '//' ]
 		then
-			# Snapshot this object non-recursively.
+			# Snapshot this dataset non-recursively.
 			print_log debug "Including $ii for regular snapshot."
 			TARGETS_REGULAR="${TARGETS_REGULAR:+$TARGETS_REGULAR	}$ii" # nb: \t
 			continue 2
-		# Check whether the candidate name is a prefix of any excluded object name.
+		# Check whether the candidate name is a prefix of any excluded dataset name.
 		elif [ "$jjj" != "${jjj#$iii}" ]
 		then
-			# Snapshot this object non-recursively.
+			# Snapshot this dataset non-recursively.
 			print_log debug "Including $ii for regular snapshot."
 			TARGETS_REGULAR="${TARGETS_REGULAR:+$TARGETS_REGULAR	}$ii" # nb: \t
 			continue 2
@@ -468,7 +468,7 @@ do
 		# Ibid regarding iii.
 		jjj="$jj/"
 
-		# Check whether any included object is a prefix of the candidate name.
+		# Check whether any included dataset is a prefix of the candidate name.
 		if [ "$iii" != "${iii#$jjj}" ]
 		then
 			print_log debug "Excluding $ii because $jj includes it recursively."
