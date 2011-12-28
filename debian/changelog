@@ -1,3 +1,14 @@
+zfs-auto-snapshot (1.0.7-0ubuntu1) unstable; urgency=low
+
+  [ Darik Horn ]
+  * Change objects to datasets in help and comments.
+  * Set keep=8 in the weekly cron job.
+
+  [ Ulrich Petri ]
+  * Fixed --prefix and --sep regexes
+
+ -- Darik Horn <dajhorn@vanadac.com>  Wed, 28 Dec 2011 13:30:02 -0600
+
 zfs-auto-snapshot (1.0.6-0ubuntu1) unstable; urgency=low
 
   * Remove redundant lines in the cron.d file.
