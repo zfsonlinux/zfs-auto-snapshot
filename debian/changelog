@@ -1,3 +1,10 @@
+zfs-auto-snapshot (1.0.8-0ubuntu1) unstable; urgency=low
+
+  * Update the README file to be more descriptive.
+  * Fix pool exclusions.
+
+ -- Darik Horn <dajhorn@vanadac.com>  Sat, 21 Jan 2012 16:37:28 -0600
+
 zfs-auto-snapshot (1.0.7-0ubuntu1) unstable; urgency=low
 
   [ Darik Horn ]
