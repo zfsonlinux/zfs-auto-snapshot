@@ -358,13 +358,13 @@ do
 done
 
 # Get a list of pools that are being scrubbed.
-ZPOOLS_SCRUBBING=$(echo "$ZFS_STATUS" | awk -F ': ' \
+ZPOOLS_SCRUBBING=$(echo "$ZPOOL_STATUS" | awk -F ': ' \
   '$1 ~ /^ *pool$/ { pool = $2 } ; \
    $1 ~ /^ *scan$/ && $2 ~ /scrub in progress/ { print pool }' \
   | sort ) 
 
 # Get a list of pools that cannot do a snapshot.
-ZPOOLS_NOTREADY=$(echo "$ZFS_STATUS" | awk -F ': ' \
+ZPOOLS_NOTREADY=$(echo "$ZPOOL_STATUS" | awk -F ': ' \
   '$1 ~ /^ *pool$/ { pool = $2 } ; \
    $1 ~ /^ *state$/ && $2 !~ /ONLINE|DEGRADED/ { print pool } ' \
   | sort)
@@ -446,7 +446,7 @@ do
 		# Ibid regarding iii.
 		jjj="$jj/"
 
-		# The --recusive switch only matters for non-wild arguments.
+		# The --recursive switch only matters for non-wild arguments.
 		if [ -z "$opt_recursive" -a "$1" != '//' ]
 		then
 			# Snapshot this dataset non-recursively.
