@@ -812,7 +812,7 @@ test -n "$opt_dry_run" \
   && print_log info "Doing a dry run. Not running these commands..."
 
 # expand FS list if replication is not used 
-if [ "$opt_recursive" = ' ' ]
+if [ "$opt_recursive" = ' ' -o "$1" = "//" ]
 then
     for ii in "${TARGETS_TMP_RECURSIVE[@]}"; do TARGETS_DRECURSIVE=( ${TARGETS_DRECURSIVE[@]} $(printf "%s\n" ${ZFS_LOCAL_LIST[@]} | grep ^$ii) ); done
 else
