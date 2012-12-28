@@ -69,7 +69,7 @@ declare -a TARGETS_DRECURSIVE
 declare -a TARGETS_DREGULAR
 declare -i RC
 
-tmp_file_prefix='zfs-auto-snapshot'
+tmp_file_prefix='zfs-auto-snapshot.XXXXXXXXX'
 
 
 set -o pipefail
