@@ -202,18 +202,37 @@ do_delete ()
 {
 
     local DEL_TYPE="$1"
-    local SNAPNAME="$2"
+    local FSSNAPNAME="$2"
     local FLAGS="$3"
+    local FSNAME="$4"
+    local SNAPNAME=$(echo $FSSNAPNAME | awk -F'@' '{print $2}')
     
     KEEP=$(( $KEEP - 1 ))
     if [ "$KEEP" -le '0' ]
     then
+    
+	# be sure to dismount any snapshots with canmount=on and snapdir=visible {ORS="\n"}
+        umount_list=$(printf "%s\n" $(printf "%s\t%s\n" "${UMOUNT_DESTROY[@]}" | grep ^$FSNAME | awk -F'\t' '{print $2}'))
+        for kk in ${umount_list[@]}; do
+	    umount_str="umount -f $kk/.zfs/snapshot$kk@$SNAPNAME"
+	    case "$DEL_TYPE" in 
+		(remote)
+			do_run "$opt_sendtocmd" "$umount_str"
+			;;
+		(local)
+			do_run "$umount_str"
+			;;
+	    esac  
+	    test "$FLAGS" != "-r" && break 
+	done
+	
+	
 	case "$DEL_TYPE" in
 	    (remote)
-			do_run "$opt_sendtocmd" "zfs destroy $FLAGS '$SNAPNAME'"
+			do_run "$opt_sendtocmd" "zfs destroy $FLAGS '$FSSNAPNAME'"
 			;;
 	    (local)
-			do_run "zfs destroy $FLAGS '$SNAPNAME'"
+			do_run "zfs destroy $FLAGS '$FSSNAPNAME'"
 			;;
 	esac 
 
@@ -329,7 +348,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 		
 		if [ -z "$opt_keep" ]
 		then
-		    print_log debu "Number of snapshots not specified. Keeping all."
+		    print_log debug "Number of snapshots not specified. Keeping all."
 		    continue
 		elif [ "$opt_send" != "no" ] && [ "$SND_RC" -ne '0' ]
 		then
@@ -349,7 +368,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 		do
 			# Check whether this is an old snapshot of the filesystem.
 			test -z "${jj#$ii@$GLOB}" -o -z "${jj##$ii@$opt_prefix*}" -a -n "$opt_remove" \
-			    -a "$opt_send" != "no" && do_delete "local" "$jj" "$FLAGS"
+			    -a "$opt_send" != "no" && do_delete "local" "$jj" "$FLAGS" "$ii"
 		done
 
 		if [ "$opt_send" = "no" -o "$sFLAGS" = "-R" ]
@@ -369,7 +388,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 		for jj in ${SNAPSHOTS_OLD_REM[@]}
 		do
 			# Check whether this is an old snapshot of the filesystem.
-			test -z "${jj#$opt_sendprefix$ii@$GLOB}" && do_delete "remote" "$jj" "$FLAGS" 
+			test -z "${jj#$opt_sendprefix$ii@$GLOB}" && do_delete "remote" "$jj" "$FLAGS" "$ii" 
 		done
 
 	done
@@ -604,8 +623,9 @@ ZPOOL_STATUS=$(env LC_ALL=C zpool status 2>&1 ) \
   || { print_log error "zpool status $?: $ZPOOL_STATUS"; exit 135; }
 
 ZFS_LIST=$(env LC_ALL=C zfs list -H -t filesystem,volume -s name \
-  -o name,com.sun:auto-snapshot,com.sun:auto-snapshot:"$opt_label") \
+  -o name,com.sun:auto-snapshot,com.sun:auto-snapshot:"$opt_label",mountpoint,canmount,snapdir) \
   || { print_log error "zfs list $?: $ZFS_LIST"; exit 136; }
+  
 
 ZFS_LOCAL_LIST=($(echo "$ZFS_LIST" | awk -F'\t' '{ORS="\n"}{print $1}'))
 
@@ -678,6 +698,11 @@ else
 	NOAUTO=$(echo "$ZFS_LIST" | awk -F '\t' \
 	  'tolower($2) ~ /false/ || tolower($3) ~ /false/ {print $1}')
 fi
+
+UMOUNT_DESTROY=($(echo "$ZFS_LIST" | awk -F '\t' \
+    'tolower($5) ~ /on/ && tolower($6) ~ /visible/ {OFS="\t";ORS="\n"}{print $1,$4}'))
+    
+#echo "${UMOUNT_DESTROY[@]}"
 
 # Initialize the list of datasets that will get a recursive snapshot.
 declare -a TARGETS_DRECURSIVE
