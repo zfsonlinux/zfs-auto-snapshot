@@ -107,8 +107,8 @@ print_usage ()
   -q, --quiet        Suppress warnings and notices at the console.
   -c, --create       Create missing filesystems at destination.
   -i, --send-at-once Send more incremental snapshots at once in one package (-i argument is passed to zfs send instead of -I). 
-      --send-full=F  Send zfs full backup. Unimplemented.
-      --send-incr=F  Send zfs incremental backup. Unimplemented.
+      --send-full=F  Send zfs full backup. F is target filesystem.
+      --send-incr=F  Send zfs incremental backup. F is target filesystem.
       --sep=CHAR     Use CHAR to separate date stamps in snapshot names.
   -b, --rollback     Roll back remote filesystem to match currently sending snapshot. 
   -X, --destroy      Destroy remote snapshots to allow --send-full if destination has snapshots (needed for -F in case incremental
@@ -476,7 +476,7 @@ do
 			if [ "${#2}" -gt '1024' ]
 			then
 				print_log error "The $1 parameter must be less than 1025 characters."
-				exit 139
+				exit 239
 			elif [ "${#2}" -gt '0' ]
 			then
 				opt_event="$2"
@@ -499,7 +499,7 @@ do
 			if ! test "$2" -gt '0' 2>/dev/null
 			then
 				print_log error "The $1 parameter must be a positive integer."
-				exit 129
+				exit 229
 			fi
 			opt_keep="$2"
 			shift 2
@@ -515,7 +515,7 @@ do
 				case $opt_prefix in
 					([![:alnum:]_.:\ -]*)
 						print_log error "The $1 parameter must be alphanumeric."
-						exit 130
+						exit 230
 						;;
 				esac
 				opt_prefix="${opt_prefix#?}"
@@ -557,21 +557,24 @@ do
 					;;
 				('')
 					print_log error "The $1 parameter must be non-empty."
-					exit 131
+					exit 231
 					;;
 				(*)
 					print_log error "The $1 parameter must be one alphanumeric character."
-					exit 132
+					exit 232
 					;;
 			esac
 			opt_sep="$2"
 			shift 2
 			;;
 		(--send-full)
-			if [ -n "$opt_sendprefix" ]
-			then
+			if [ -n "$opt_sendprefix" ]; then
 				print_log error "Only one of --send-incr and --send-full must be specified."
-				exit 139
+				exit 239
+			fi
+			if [ -z "$2" ]; then
+				print_log error "Target filesystem needs to be specified with --send-full."
+				exit 243
 			fi
 			opt_sendprefix="$2/"
 			opt_send='full'			
@@ -579,10 +582,13 @@ do
 			;;
 		(--send-incr)
 			opt_sendincr="$2"
-			if [ -n "$opt_sendprefix" ]
-			then
+			if [ -n "$opt_sendprefix" ]; then
 				print_log error "Only one of --send-incr and --send-full must be specified."
-				exit 140
+				exit 240
+			fi
+			if [ -z "$2" ]; then
+				print_log error "Target filesystem needs to be specified with --send-incr."
+				exit 242
 			fi
 			opt_sendprefix="$2/"
 			opt_send='incr'			
@@ -600,7 +606,7 @@ do
 			if ! test "$2" -gt '0' 2>/dev/null
 			then
 				print_log error "The $1 parameter must be a positive integer."
-				exit 141
+				exit 241
 			fi
 			opt_remove="$2"
 			shift 2
@@ -684,7 +690,7 @@ then
 	esac
 	
 	SNAPSHOTS_OLD_REM=($(eval "$opt_sendtocmd" zfs list -H -t snapshot -S creation -o name | grep "$opt_sendprefix")) \
-	|| { print_log error "zfs list $?: $SNAPSHOTS_OLD_REM"; exit 138; }
+	|| { print_log error "zfs list $?: $SNAPSHOTS_OLD_REM"; exit 140; }
 
 	ZFS_REMOTE_LIST=($(eval "$opt_sendtocmd" zfs list -H -t filesystem,volume -s name -o name)) \
 	|| { print_log error "$opt_sendtocmd zfs list $?: $ZFS_REMOTE_LIST"; exit 139; }
