@@ -64,38 +64,26 @@ PLATFORM_LOC=''
 PLATFORM_REM=''
 
 # Other global variables.
-declare -a SNAPSHOTS_OLD_LOC
-declare -a SNAPSHOTS_OLD_REM
-declare -a CREATED_TARGETS
-declare -a ZFS_REMOTE_LIST
-declare -a ZFS_LOCAL_LIST
-declare -a TARGETS_DRECURSIVE
-declare -a TARGETS_DREGULAR
-declare -i RC
+declare -a SNAPSHOTS_OLD_LOC=('')
+declare -a SNAPSHOTS_OLD_REM=('')
+declare -a CREATED_TARGETS=('')
+declare -a ZFS_REMOTE_LIST=('')
+declare -a ZFS_LOCAL_LIST=('')
+declare -a TARGETS_DRECURSIVE=('')
+declare -a TARGETS_DREGULAR=('')
+declare -a MOUNTED_LIST_LOC=('')
+declare -a MOUNTED_LIST_REM=('')
+declare -i RC=99
 
-tmp_file_prefix='/tmp/zfs-auto-snapshot.XXXXXXXX'
-
-PLATFORM_LOC=`uname`
-case "$PLATFORM_LOC" in 
-    (Linux)
-	getopt_cmd='getopt'
-	;;
-    (Darwin)
-	getopt_cmd='/opt/local/bin/getopt'
-	;;
-    (*)
-	print_log error "Local system not known ($PLATFORM_LOC) - needs one of Darwin, Linux. Exiting."
-	exit 300
-	;;
-esac
-
+tmp_file_prefix="/tmp/zfs-auto-snapshot.XXXXXXXX"
 set -o pipefail
 
 print_usage ()
 {
 	echo "Usage: $0 [options] [-l label] <'//' | name [name...]>
   --default-exclude  Exclude datasets if com.sun:auto-snapshot is unset.
-  --remove-local=n   Remove local snapshots after successfully sent via --send-incr or --send-full but still keeps n snapshots.
+  --remove-local=n   Remove local snapshots after successfully sent via --send-incr or --send-full but still keeps n newest snapshots
+                     (this will destroy snapshots named according to --prefix, but regardless of --label).
   -d, --debug        Print debugging messages.
   -e, --event=EVENT  Set the com.sun:auto-snapshot-desc property to EVENT.
   -n, --dry-run      Print actions without actually doing anything.
@@ -110,7 +98,6 @@ print_usage ()
       --send-full=F  Send zfs full backup. F is target filesystem.
       --send-incr=F  Send zfs incremental backup. F is target filesystem.
       --sep=CHAR     Use CHAR to separate date stamps in snapshot names.
-  -b, --rollback     Roll back remote filesystem to match currently sending snapshot. 
   -X, --destroy      Destroy remote snapshots to allow --send-full if destination has snapshots (needed for -F in case incremental
                      snapshots on local and remote do not match).
   -F, --fallback     Allow fallback from --send-incr to --send-full, if incremental sending is not possible (filesystem on remote just
@@ -118,14 +105,12 @@ print_usage ()
   -g, --syslog       Write messages into the system log.
   -r, --recursive    Snapshot named filesystem and all descendants.
   -R, --replication  Use zfs's replication (zfs send -R) instead of simple send over newly created snapshots (check man zfs for details).
+                     -f is used automatically. 
   -v, --verbose      Print info messages.
   -f, --force        Passes -F argument to zfs receive
       name           Filesystem and volume names, or '//' for all ZFS datasets.
 " 
 }
-
-
-trap "{ rm -f $LOCKFILE; }" EXIT
 
 
 print_log () # level, message, ...
@@ -153,6 +138,7 @@ print_log () # level, message, ...
 		(war*)
 			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.warning $*
 			test -z "$opt_quiet" && echo Warning: $* 1>&2
+			WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
 			;;
 		(not*)
 			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.notice $*
@@ -197,22 +183,46 @@ do_run () # [argv]
 }
 
 
-do_send ()
+do_unmount ()
 {
-    local SENDTYPE="$1"
-    local SNAPFROM="$2"
-    local SNAPTO="$3"
-    local SENDFLAGS="$4"
-    local REMOTEFS="$5"
-    
-    
-    test $SENDTYPE = "incr" && do_run "zfs send " "$SENDFLAGS" "$opt_atonce  $SNAPFROM   $SNAPTO" "$opt_pipe" "$opt_sendtocmd" "zfs recv  $opt_force -u $REMOTEFS"
-    test $SENDTYPE = "full" && do_run "zfs send " "$SENDFLAGS" "$SNAPTO" "$opt_pipe" "$opt_sendtocmd" "zfs recv $opt_force -u $REMOTEFS"
-    
-    test "$RC" -ne '0' && WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
+	local TYPE="$1"
+	local FLAGS="$3"
+	local FSNAME="$4"
+	local SNAPNAME="$5"
+	local rsort_cmd='0'
+	local remote_cmd=''
 
-    return "$RC"
+	case "$TYPE" in
+		(remote)
+            umount_list=( "${MOUNTED_LIST_REM[@]}" ) 
+			remote_cmd="$opt_sendtocmd"
+			;;
+		(local)
+            umount_list=( "${MOUNTED_LIST_LOC[@]}" )
+			;;
+	esac
 
+    if [ -n "$SNAPNAME" ]; then
+        SNAPNAME="@$SNAPNAME"
+    else
+		rsort_cmd='1'
+    fi
+    umount_list=( $(printf "%s\t%s\n" "${umount_list[@]}" | grep ^"$FSNAME$SNAPNAME" ) )
+
+    test -z "$umount_list" && return 0
+
+	# reverse sort the list if unmounting filesystem and not only snapshot
+    umount_list=($(printf "%s\t%s\n" "${umount_list[@]}" | awk -F'\t' '{print $2}'))
+    test $rsort_cmd -eq '1' && umount_list=($(printf "%s\n" "${umount_list[@]}"))
+
+	for kk in ${umount_list[@]}; do
+		print_log debug "Trying to unmount '$kk'."
+		umount_cmd="umount '$kk'"
+		if ! do_run "$remote_cmd" "$umount_cmd"; then return "$RC"; fi
+		test "$FLAGS" != "-r" && break
+	done
+
+	return 0
 }
 
 do_delete ()
@@ -221,48 +231,33 @@ do_delete ()
     local DEL_TYPE="$1"
     local FSSNAPNAME="$2"
     local FLAGS="$3"
-    local FSNAME="$4"
+    local FSNAME=$(echo $FSSNAPNAME | awk -F'@' '{print $1}')
     local SNAPNAME=$(echo $FSSNAPNAME | awk -F'@' '{print $2}')
-    
+    local remote_cmd=''
+
+    if [ "$FSSNAPNAME" = "$FSNAME" -a "$FLAGS" = "-r" ]; then
+        if [ "$opt_destroy" -ne '1' ]; then
+            print_log warning "Filesystem $FSNAME destroy requested, but option -X not specified. Aborting."
+            return 1
+        else
+            KEEP='0'
+        fi
+    fi
+
     KEEP=$(( $KEEP - 1 ))
     if [ "$KEEP" -le '0' ]
     then
-    
-	# be sure to dismount any snapshots with canmount=on and snapdir=visible
-	case "$DEL_TYPE" in
-	    (remote)
-		    umount_list=$(printf "%s\n" $(printf "%s\t%s\n" "${UMOUNT_DESTROY_REM[@]}" | grep ^$opt_sendprefix$FSNAME | awk -F'\t' '{print $2}'))
-		    remote_cmd="$opt_sendtocmd"
-		    mounted_list="$MOUNTED_LIST_REM"
-		    ;;
-	    (local)
-		    umount_list=$(printf "%s\n" $(printf "%s\t%s\n" "${UMOUNT_DESTROY[@]}" | grep ^$FSNAME | awk -F'\t' '{print $2}'))
-		    remote_cmd=''
-		    mounted_list="$MOUNTED_LIST_LOC"
-		    ;;
-	esac
-	
-        for kk in ${umount_list[@]}; do
-	    umount_cmd="umount -f $kk/.zfs/snapshot/$SNAPNAME"
-	    grep_sum=$(echo "$mounted_list" | grep "$kk/.zfs/snapshot/$SNAPNAME" )
-	    if [ -n "$grep_sum" ]; then
-		    print_log debug "Trying to unmount $kk/.zfs/snapshot/$SNAPNAME."
-		    do_run "$remote_cmd" "$umount_cmd"
-	    fi
-	    test "$FLAGS" != "-r" && break 
-	done
-	
-	do_run "$remote_cmd" "zfs destroy $FLAGS '$FSSNAPNAME'"
-
-	if [ "$RC" -eq 0 ]
-	then
-			DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
-	else
-			WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
-	fi
-    
+        if do_unmount "$DEL_TYPE" "" "$FLAGS" "$FSNAME" "$SNAPNAME"; then
+            if [ "$DEL_TYPE" = "remote" ]; then
+                remote_cmd="$opt_sendtocmd"
+            fi
+            if do_run "$remote_cmd" "zfs destroy $FLAGS '$FSSNAPNAME'"; then
+                DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
+            fi
+        fi
     fi
-    
+
+    return "$RC"
 }
 
 is_member ()
@@ -277,6 +272,39 @@ is_member ()
     return "$ISMEMBER"
 }
 
+do_send ()
+{
+    local SENDTYPE="$1"
+    local SNAPFROM="$2"
+    local SNAPTO="$3"
+    local SENDFLAGS="$4"
+    local REMOTEFS="$5"
+    local list_child=('')
+
+    if [ "$SENDFLAGS" = "-R" ]; then
+        # for full send with -R, target filesystem must be without snapshots including chilren as well
+        list_child=($(printf "%s\n" "${SNAPSHOTS_OLD_REM[@]}" | grep ^"$REMOTEFS" | grep @))
+        if [ "$SENDTYPE" = "full" ]; then
+            list_child=( "${list_child[@]}" $(printf "%s\n" "${ZFS_REMOTE_LIST[@]}" | grep ^"$REMOTEFS" | sort -r ))
+        fi
+    elif [ "$SENDTYPE" = "full" ]; then
+        list_child=( $(printf "%s\n" "${SNAPSHOTS_OLD_REM[@]}" | grep ^"$REMOTEFS@" ) )
+    fi
+        
+    for ll in ${list_child[@]}; do
+        if do_delete "remote" "$ll" ""; then
+            continue
+        fi
+        print_log debug "Can't destroy remote filesystem $REMOTEFS ($ll). Can't continue with send-full."
+        return 1
+    done
+
+    test $SENDTYPE = "incr" && do_run "zfs send " "$SENDFLAGS" "$opt_atonce  $SNAPFROM   $SNAPTO" "$opt_pipe" "$opt_sendtocmd" "zfs recv  $opt_force -u $REMOTEFS"
+    test $SENDTYPE = "full" && do_run "zfs send " "$SENDFLAGS" "$SNAPTO" "$opt_pipe" "$opt_sendtocmd" "zfs recv $opt_force -u $REMOTEFS"
+
+    return "$RC"
+}
+
 do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 {
 	local PROPS="$1"
@@ -285,171 +313,201 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 	local GLOB="$4"
 	local TARGETS=(${5})
 	local KEEP=''
-	
-	test "$sFLAGS" = '-R' && FLAGS='-r' 
+	local LAST_REMOTE=''
+
+    if test "$sFLAGS" = '-R'; then
+        FLAGS='-r'
+        SNexp='.*'
+    else
+        FLAGS=''
+    fi
 
 	for ii in ${TARGETS[@]}
 	do
 
 		FALLBACK='0'
 		SND_RC='1'
-		
-		print_log debug "...Snapshooting $ii"
-		
-		if do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'" 
+
+		print_log debug "--> Snapshooting $ii"
+
+		if ! do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'" 
 		then
-			SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT + 1 ))
-		else
-			WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
 			continue
-		fi 
-		
+		fi
+		SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT + 1 ))
 
 		if [ "$opt_send" = "incr" ]
 		then
-		    LAST_REMOTE=$(printf "%s\n" "${SNAPSHOTS_OLD_REM[@]}" | grep "$opt_sendprefix$ii@" | grep -m1 . | awk -F'@' '{print $2}')
-		
-		    if [ -z "$LAST_REMOTE" ] 
-		    then
-			# no snapshot on remote
-			FALLBACK='1'
-		    else
-		        # last snapshot on remote is no more available on local, this applies both for -r and non -r runs
-			if [ $(printf "%s\n" "${SNAPSHOTS_OLD_REM[@]}" | grep -e ^$opt_sendprefix$ii.*@$LAST_REMOTE | grep -c . ) -ne \
-			    $(printf "%s\n" "${SNAPSHOTS_OLD_LOC[@]}" | grep -e ^$ii.*@$LAST_REMOTE | grep -c . ) ]
+
+            LAST_REMOTE=$(printf "%s\n" ${SNAPSHOTS_OLD_REM[@]} | grep ^$opt_sendprefix/$ii@ | grep -m1 . | awk -F'@' '{print $2}')
+
+			# remote filesystem just created. if -R run
+			if ! is_member "${CREATED_TARGETS[*]}" "$opt_sendprefix/$ii"
+            then  
+				FALLBACK='2'
+			elif [ -z "$LAST_REMOTE" ]
 			then
-			    FALLBACK='3'
+				# no snapshot on remote
+				FALLBACK='1'
+			# last snapshot on remote is no more available on local, this applies both for -r and non -r runs
+			elif [ $(printf "%s\n" "${SNAPSHOTS_OLD_REM[@]}" | grep -c -e ^$opt_sendprefix/$ii$SNexp@$LAST_REMOTE ) -ne $(printf "%s\n" "${SNAPSHOTS_OLD_LOC[@]}" | grep -c -e ^$ii$SNexp@$LAST_REMOTE ) ]
+			then
+				FALLBACK='3'
+            else
+				FALLBACK='0'
 			fi
-		    fi
-			
-		    # remote filesystem just created. if -R run, check childen as well
-		    is_member "${CREATED_TARGETS[*]}" "$opt_sendprefix$ii"
-		    if [ "$?" -eq 1 ]; then 
-			FALLBACK='2'; 
-		    elif [ -n "$sFLAGS" ]; then
-			if [ test $(printf "%s\n" ${CREATED_TARGETS[@]} | grep ^"$opt_sendprefix$ii/" ) != '' ]; then FALLBACK='4'; fi
-		    fi
 
-		    case "$FALLBACK" in
-		        (1)
-			    print_log info "falling back to full send, no snapshot exists at destination: $ii"
-			    ;;
-			(2|4)
-			    print_log info "falling back to full send, remote filesystem was just created: $ii"
-			    ;;
-			(3)
-			    print_log info "falling back to full send, last snapshot on remote is not available on local: $ii"
-			    ;;
-			(0)
-			    do_send "incr" "$ii@$LAST_REMOTE" "$ii@$NAME" "$sFLAGS" "$opt_sendprefix$ii"
-			    SND_RC="$?"
-			    ;;
-		    esac
-
-		    case "$FALLBACK" in 
-			(3|4)
-			    test "$opt_destroy" -eq '1' && do_run "$opt_sendtocmd" "zfs list -H -t snapshot -o name" "|" "grep $opt_sendprefix$ii@" "$opt_pipe" "$opt_sendtocmd" "xargs -L1 zfs destroy $FLAGS"
-			    ;;
-		    esac
-
+			case "$FALLBACK" in
+				(1)
+					print_log info "Going back to full send, no snapshot exists at destination: $ii"
+					;;
+				(2)
+					print_log info "Going back to full send, remote filesystem was just created: $ii"
+					;;
+				(3)
+					print_log info "Going back to full send, last snapshot on remote is not available on local: $opt_sendprefix/$ii@$LAST_REMOTE"
+					;;
+				(0)
+					do_send "incr" "$ii@$LAST_REMOTE" "$ii@$NAME" "$sFLAGS" "$opt_sendprefix/$ii"
+					SND_RC="$?"
+					;;
+			esac
 		fi
-		
-		if [ "$opt_send" = "full" -o "$FALLBACK" -ne '0' -a "$opt_fallback" -eq '1' ]
-		then
-		    do_send "full" "" "$ii@$NAME" "$sFLAGS" "$opt_sendprefix$ii"
-		    SND_RC="$?"
+
+		if [ "$opt_send" = "full" -o "$FALLBACK" -ne '0' -a "$opt_fallback" -eq '1' ]; then
+			do_send "full" "" "$ii@$NAME" "$sFLAGS" "$opt_sendprefix/$ii"
+			SND_RC="$?"
 		fi
-		
-		if [ "$SND_RC" -eq 0 ]; then
-		    SENT_COUNT=$(( $SENT_COUNT + 1 ))
-	    	elif [ "$opt_send" != "no" ]; then    
-		    WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
-		fi		
+		test "$SND_RC" -eq '0' && SENT_COUNT=$(( $SENT_COUNT + 1 ))
 
 		# Retain at most $opt_keep number of old snapshots of this filesystem,
 		# including the one that was just recently created.
-		
 		if [ -z "$opt_keep" ]
 		then
-		    print_log debug "Number of snapshots not specified. Keeping all."
-		    continue
+			print_log debug "Number of snapshots not specified. Keeping all."
+			continue
 		elif [ "$opt_send" != "no" ] && [ "$SND_RC" -ne '0' ]
 		then
-		    print_log debug "Sending of filesystem was requested, but send failed. Ommiting destroy procedures."
-		    continue
+			print_log debug "Sending of filesystem was requested, but send failed. Ommiting destroy procedures."
+			continue
 		elif [ "$opt_send" != "no" -a -n "$opt_remove" ]
 		then
-		    KEEP="$opt_remove"
-		    print_log debug "Sending was successful, removal of local snapshots requested. Keeping only $KEEP."
+			KEEP="$opt_remove"
 		else
-		    KEEP="$opt_keep"
-		    print_log debug "Destroying local snapshots, keeping $KEEP."		    
+			KEEP="$opt_keep"
 		fi
+		print_log debug "Destroying local snapshots, keeping $KEEP."		    
 
 		# ASSERT: The old snapshot list is sorted by increasing age.
 		for jj in ${SNAPSHOTS_OLD_LOC[@]}
 		do
 			# Check whether this is an old snapshot of the filesystem.
 			test -z "${jj#$ii@$GLOB}" -o -z "${jj##$ii@$opt_prefix*}" -a -n "$opt_remove" \
-			    -a "$opt_send" != "no" && do_delete "local" "$jj" "$FLAGS" "$ii"
+				-a "$opt_send" != "no" && do_delete "local" "$jj" "$FLAGS"
 		done
 
-		if [ "$opt_send" = "no" -o "$sFLAGS" = "-R" ]
+		if [ "$opt_send" = "no" ]
 		then
-		    print_log debug "No sending option or replication, skipping remote snapshot removal."
-		    continue
-		elif  [ "$opt_destroy" -eq '1' -a "$FALLBACK" -eq '3' ]
+			print_log debug "No sending option specified, skipping remote snapshot removal."
+			continue
+		elif [ "$sFLAGS" = "-R" ]
 		then
-		    print_log debug "Sent full copy, all remote snapshots were already destroyed."
-		    continue
+			print_log debug "Replication specified, snapshots were removed while sending."
+			continue
+		elif [ "$opt_destroy" -eq '1' -a "$FALLBACK" -ne '0' -o "$opt_send" = "full" ]
+		then
+			print_log debug "Sent full copy, all remote snapshots were already destroyed."
+			continue
 		else
-		    KEEP="$opt_keep"
-		    print_log debug "Destroying remote snapshots, keeping only $KEEP."
+			KEEP="$opt_keep"
+			print_log debug "Destroying remote snapshots, keeping only $KEEP."
 		fi
 
 		# ASSERT: The old snapshot list is sorted by increasing age.
 		for jj in ${SNAPSHOTS_OLD_REM[@]}
 		do
 			# Check whether this is an old snapshot of the filesystem.
-			test -z "${jj#$opt_sendprefix$ii@$GLOB}" && do_delete "remote" "$jj" "$FLAGS" "$ii" 
+			test -z "${jj#$opt_sendprefix/$ii@$GLOB}" && do_delete "remote" "$jj" "$FLAGS" 
 		done
 
 	done
 }
 
+do_getmountedfs ()
+{
+
+    local MOUNTED_TYPE="$1"
+    local MOUNTED_LIST
+    local remote_cmd=''
+
+    case "$MOUNTED_TYPE" in
+        (remote)
+            remote_cmd="$opt_sendtocmd"
+            PLATFORM="$PLATFORM_REM"
+            ;;
+        (local)
+            remote_cmd=""
+            PLATFORM="$PLATFORM_LOC"
+            ;;
+    esac
+
+    case "$PLATFORM" in
+        (Linux)
+            MOUNTED_LIST=( $(eval $remote_cmd cat /proc/mounts | grep zfs | awk -F' ' '{OFS="\t"}{print $1,$2}' ) )
+            ;;
+        (Darwin)
+            MOUNTED_LIST=( $(eval $remote_cmd zfs mount | awk -F' ' '{OFS="\t"}{print $1,$2}') $(eval $remote_cmd mount -t zfs | grep @ | awk -F' ' '{OFS="\t"}{print $1,$3}') )
+            ;;
+    esac
+
+    printf "%s\t%s\n" "${MOUNTED_LIST[@]}" | sort  
+}
+
 do_createfs ()
 {
 
-    local FS=(${1})
-    
-    for ii in ${FS[@]}; do
-     
-    print_log debug "checking: $opt_sendprefix$ii"
+	local FS=(${1})
 
-    if is_member "${ZFS_REMOTE_LIST[*]}" "$opt_sendprefix$ii" -eq 0
-    then
-	    print_log debug "creating: $opt_sendprefix$ii"
-	    
-	    if do_run "$opt_sendtocmd" "zfs create $opt_sendprefix$ii"
-	    then
-	        CREATION_COUNT=$(( $CREATION_COUNT + 1 ))
-	        CREATED_TARGETS=( ${CREATED_TARGETS[@]} "$opt_sendprefix$ii" )
-	    else 
-	        WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
-	    fi
-    fi
-    done
-    
+	for ii in ${FS[@]}; do
+
+		print_log debug "checking: $opt_sendprefix/$ii"
+
+		if is_member "${ZFS_REMOTE_LIST[*]}" "$opt_sendprefix/$ii" -eq 0
+		then
+			print_log debug "creating: $opt_sendprefix/$ii"
+
+			if do_run "$opt_sendtocmd" "zfs create $opt_sendprefix/$ii"
+			then 
+				CREATION_COUNT=$(( $CREATION_COUNT + 1 ))
+				CREATED_TARGETS=( ${CREATED_TARGETS[@]} "$opt_sendprefix/$ii" )
+			fi
+		fi
+	done
+
 }
 
 # main ()
 # {
                     
+PLATFORM_LOC=`uname`
+case "$PLATFORM_LOC" in 
+    (Linux)
+        getopt_cmd='getopt'
+        ;;
+    (Darwin)
+        getopt_cmd='/opt/local/bin/getopt'
+        ;;
+    (*)
+        print_log error "Local system not known ($PLATFORM_LOC) - needs one of Darwin, Linux. Exiting."
+        exit 300
+        ;;
+esac
+
 GETOPT=$("$getopt_cmd" \
   --longoptions=default-exclude,dry-run,skip-scrub,recursive,send-atonce \
   --longoptions=event:,keep:,label:,prefix:,sep:,create,fallback,rollback \
   --longoptions=debug,help,quiet,syslog,verbose,send-full:,send-incr:,remove-local:,destroy \
-  --options=dnshe:l:k:p:rs:qgvfixcXFbR \
+  --options=dnshe:l:k:p:rs:qgvfixcXFRb \
   -- "$@" ) \
   || exit 128
 
@@ -525,7 +583,7 @@ do
 			;;
 		(-q|--quiet)
 			opt_debug=''
-			opt_quiet='1'
+			opt_quiet='1' 
 			opt_verbose=''
 			shift 1
 			;;
@@ -544,10 +602,6 @@ do
 			;;
 		(-F|--fallback)
 			opt_fallback='1'
-			shift 1
-			;;
-		(-b|--rollback)
-			opt_force='-F'
 			shift 1
 			;;
 		(--sep)
@@ -576,7 +630,7 @@ do
 				print_log error "Target filesystem needs to be specified with --send-full."
 				exit 243
 			fi
-			opt_sendprefix="$2/"
+			opt_sendprefix="$2"
 			opt_send='full'			
 			shift 2
 			;;
@@ -590,7 +644,7 @@ do
 				print_log error "Target filesystem needs to be specified with --send-incr."
 				exit 242
 			fi
-			opt_sendprefix="$2/"
+			opt_sendprefix="$2"
 			opt_send='incr'			
 			shift 2
 			;;
@@ -616,6 +670,10 @@ do
 			opt_verbose='1'
 			shift 1
 			;;
+		(-f|--force|-b|--rollback)
+			opt_force='-F'
+			shift 1
+			;;
 		(--)
 			shift 1
 			break
@@ -623,13 +681,18 @@ do
 	esac
 done
 
-
-
 if [ "$#" -eq '0' ]
 then
 	print_log error "The filesystem argument list is empty."
 	exit 133
 fi 
+
+if [ -f ${tmp_file_prefix%%X*}* ]; then 
+    print_log error "another copy is running ..."
+    exit 99
+fi  
+LOCKFILE=`mktemp $tmp_file_prefix`
+trap "rm -f $LOCKFILE; exit $?" INT TERM EXIT
 
 # Count the number of times '//' appears on the command line.
 SLASHIES='0'
@@ -657,49 +720,6 @@ ZFS_LIST=$(env LC_ALL=C zfs list -H -t filesystem,volume -s name \
   
 ZFS_LOCAL_LIST=($(echo "$ZFS_LIST" | awk -F'\t' '{ORS="\n"}{print $1}'))
 
-UMOUNT_DESTROY=($(echo "$ZFS_LIST" | awk -F '\t' \
-	    'tolower($5) ~ /on/ && tolower($6) ~ /visible/ {OFS="\t";ORS="\n"}{print $1,$4}'))
-
-SNAPSHOTS_OLD_LOC=($(env LC_ALL=C zfs list -H -t snapshot -S creation -o name)) \
-   || { print_log error "zfs list $?: $SNAPSHOTS_OLD_LOC"; exit 137; }
-
-case "$PLATFORM_LOC" in 
-    (Linux)
-	    MOUNTED_LIST_LOC=$(eval "cat /proc/mounts" | grep /.zfs )
-	    ;;
-    (Darwin)
-	    MOUNTED_LIST_LOC=$(eval "mount" | grep /.zfs )
-	    ;;
-esac
-
-if [ "$opt_send" != "no" ]
-then
-	PLATFORM_REM=$(eval "$opt_sendtocmd" "uname")
-
-	case "$PLATFORM_REM" in 
-	    (Linux)
-		    MOUNTED_LIST_REM=$(eval "$opt_sendtocmd" "cat /proc/mounts" | grep /.zfs )
-		    ;;
-	    (Darwin)
-		    MOUNTED_LIST_REM=$(eval "$opt_sendtocmd" "mount" | grep /.zfs )
-		    ;;
-	    (*)
-		    print_log error "Remote system not known ($PLATFORM_REM) - needs one of Darwin, Linux. Exiting."
-		    exit 301
-		    ;;
-	esac
-	
-	SNAPSHOTS_OLD_REM=($(eval "$opt_sendtocmd" zfs list -H -t snapshot -S creation -o name | grep "$opt_sendprefix")) \
-	|| { print_log error "zfs list $?: $SNAPSHOTS_OLD_REM"; exit 140; }
-
-	ZFS_REMOTE_LIST=($(eval "$opt_sendtocmd" zfs list -H -t filesystem,volume -s name -o name)) \
-	|| { print_log error "$opt_sendtocmd zfs list $?: $ZFS_REMOTE_LIST"; exit 139; }
-
-	UMOUNT_DESTROY_REM=($(eval "$opt_sendtocmd" zfs list -H -t filesystem,volume -s name -o name,mountpoint,canmount,snapdir | awk -F '\t' \
-	    'tolower($3) ~ /on/ && tolower($4) ~ /visible/ {OFS="\t";ORS="\n"}{print $1,$2}'))
-
-fi
-
 # Verify that each argument is a filesystem or volume.
 for ii in "$@"
 do
@@ -713,21 +733,6 @@ do
 	print_log error "$ii is not a ZFS filesystem or volume."
 	exit 138
 done
-
-
-
-WAITING=0
-while [ -f "${tmp_file_prefix%%X*}"* ]; do
-    if [ "$WAITING" -gt 12 ]; then
-	print_log warning "exiting due to lock file ... "
-	exit 555
-    fi
-    print_log warning "sleeping on lock file ... $WAITING"
-    sleep 5
-    let WAITING=WAITING+1
-done
-LOCKFILE=`mktemp $tmp_file_prefix`
-
 
 # Get a list of pools that are being scrubbed.
 ZPOOLS_SCRUBBING=$(echo "$ZPOOL_STATUS" | awk -F ': ' \
@@ -743,7 +748,7 @@ ZPOOLS_NOTREADY=$(echo "$ZPOOL_STATUS" | awk -F ': ' \
 
 # Get a list of datasets for which snapshots are not explicitly disabled.
 CANDIDATES=$(echo "$ZFS_LIST" | awk -F '\t' \
-  'tolower($2) !~ /false/ && tolower($3) !~ /false/ {print $1}')
+  'tolower($2) !~ /false/ && tolower($3) !~ /false/ {print $1}' )
 
 # If the --default-exclude flag is set, then exclude all datasets that lack
 # an explicit com.sun:auto-snapshot* property. Otherwise, include them.
@@ -759,12 +764,11 @@ else
 fi
 
 # Initialize the list of datasets that will get a recursive snapshot.
-declare -a TARGETS_DRECURSIVE
-declare -a TARGETS_TMP_RECURSIVE
+declare -a TARGETS_DRECURSIVE=('')
+declare -a TARGETS_TMP_RECURSIVE=('')
 
 # Initialize the list of datasets that will get a non-recursive snapshot.
-declare -a TARGETS_DREGULAR
-
+declare -a TARGETS_DREGULAR=('')
 
 for ii in $CANDIDATES
 do
@@ -863,7 +867,6 @@ do
 	#
 	print_log debug "Including $ii for recursive snapshot."
 	TARGETS_TMP_RECURSIVE=( ${TARGETS_TMP_RECURSIVE[@]} $( printf "%s\n" $ii) )
-	#TARGETS_DRECURSIVE=( ${TARGETS_DRECURSIVE[@]} $(printf "%s\n" ${ZFS_LOCAL_LIST[@]} | grep ^$ii) )
 	
 done
 
@@ -881,12 +884,16 @@ SNAPNAME="$opt_prefix${opt_label:+$opt_sep$opt_label-$DATE}"
 # The expression for matching old snapshots.  -YYYY-MM-DD-HHMM
 SNAPGLOB="$opt_prefix${opt_label:+?$opt_label}????????????????"
 
+if test -n "$TARGETS_DREGULAR"; then
+    print_log info "Doing regular snapshots of ${TARGETS_DREGULAR[@]}"
+    SNAPSHOTS_OLD_LOC=( $(eval zfs list -r -d 1 -H -t snapshot -S creation -o name $(printf "%s " ${TARGETS_DREGULAR[@]}) ))
+fi
 
-test -n "$TARGETS_DREGULAR" \
-  && print_log info "Doing regular snapshots of ${TARGETS_DREGULAR[@]}"
-
-test -n "$TARGETS_TMP_RECURSIVE" \
-  && print_log info "Doing recursive snapshots of ${TARGETS_TMP_RECURSIVE[@]}"
+if test -n "$TARGETS_TMP_RECURSIVE"; then
+    print_log info "Doing recursive snapshots of ${TARGETS_TMP_RECURSIVE[@]}"
+    SNAPSHOTS_OLD_LOC=( ${SNAPSHOTS_OLD_LOC[@]} $(eval zfs list -r -H -t snapshot -S creation -o name $(printf "%s " ${TARGETS_TMP_RECURSIVE[@]} ) )) \
+        || { print_log error "zfs list $?: $SNAPSHOTS_OLD_LOC"; exit 137; }
+fi
 
 test -n "$opt_dry_run" \
   && print_log info "Doing a dry run. Not running these commands..."
@@ -897,6 +904,31 @@ then
     for ii in "${TARGETS_TMP_RECURSIVE[@]}"; do TARGETS_DRECURSIVE=( ${TARGETS_DRECURSIVE[@]} $(printf "%s\n" ${ZFS_LOCAL_LIST[@]} | grep ^$ii) ); done
 else
     TARGETS_DRECURSIVE=( ${TARGETS_TMP_RECURSIVE[@]} )
+fi
+
+MOUNTED_LIST_LOC=$(eval do_getmountedfs "local")
+
+# initialize remote system parameters, filesystems, mounts and snapshots
+if [ "$opt_send" != "no" ]
+then
+    PLATFORM_REM=$(eval "$opt_sendtocmd" "uname")
+
+    case "$PLATFORM_REM" in 
+        (Linux|Darwin)
+            ;;
+        (*)
+            print_log error "Remote system not known ($PLATFORM_REM) - needs one of Darwin, Linux. Exiting."
+            exit 301
+            ;;
+    esac
+
+    MOUNTED_LIST_REM=$(eval do_getmountedfs "remote")
+
+    SNAPSHOTS_OLD_REM=($(eval "$opt_sendtocmd" zfs list -r -H -t snapshot -S creation -o name "$opt_sendprefix")) \
+                          || { print_log error "zfs list $?: $SNAPSHOTS_OLD_REM"; exit 140; }
+
+    ZFS_REMOTE_LIST=($(eval "$opt_sendtocmd" zfs list -H -t filesystem,volume -s name -o name)) \
+                         || { print_log error "$opt_sendtocmd zfs list $?: $ZFS_REMOTE_LIST"; exit 139; }
 fi
 
 if [ "$opt_create" -eq '1' -a "$opt_send" != "no" ]; then
@@ -913,8 +945,6 @@ print_log notice "@$SNAPNAME," \
   "$DESTRUCTION_COUNT destroyed," \
   "$CREATION_COUNT created filesystems," \
   "$WARNING_COUNT warnings."
-
-rm -f $LOCKFILE
 
 exit 0
 # }
