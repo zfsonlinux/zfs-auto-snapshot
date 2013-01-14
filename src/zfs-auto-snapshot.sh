@@ -281,7 +281,7 @@ do_send ()
     local REMOTEFS="$5"
     local list_child=('')
 
-    if [ "$SENDFLAGS" = "-R" ]; then
+    if [ "$SENDFLAGS" = "-R" -a "$SENDTYPE" = "full" ]; then
         # for full send with -R, target filesystem must be without snapshots including chilren as well
         list_child=($(printf "%s\n" "${SNAPSHOTS_OLD_REM[@]}" | grep ^"$REMOTEFS" | grep @))
         if [ "$SENDTYPE" = "full" ]; then
@@ -901,7 +901,7 @@ test -n "$opt_dry_run" \
 # expand FS list if replication is not used 
 if [ "$opt_recursive" = ' ' -o "$1" = "//" ]
 then
-    for ii in "${TARGETS_TMP_RECURSIVE[@]}"; do TARGETS_DRECURSIVE=( ${TARGETS_DRECURSIVE[@]} $(printf "%s\n" ${ZFS_LOCAL_LIST[@]} | grep ^$ii) ); done
+    for ii in ${TARGETS_TMP_RECURSIVE[@]}; do TARGETS_DRECURSIVE=( ${TARGETS_DRECURSIVE[@]} $(printf "%s\n" ${ZFS_LOCAL_LIST[@]} | grep ^$ii) ); done
 else
     TARGETS_DRECURSIVE=( ${TARGETS_TMP_RECURSIVE[@]} )
 fi
