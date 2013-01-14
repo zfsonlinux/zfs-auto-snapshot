@@ -696,12 +696,12 @@ then
 	exit 133
 fi 
 
-if [ -f ${tmp_file_prefix%%X*}* ]; then 
+if [ -f "${tmp_file_prefix%%X*}"* ]; then 
     print_log error "another copy is running ..."
     exit 99
 fi  
-LOCKFILE=`mktemp $tmp_file_prefix`
-trap "rm -f $LOCKFILE; exit $?" INT TERM EXIT
+LOCKFILE=$(mktemp $tmp_file_prefix)
+trap "rm -f '$LOCKFILE'; exit $?" INT TERM EXIT
 
 # Count the number of times '//' appears on the command line.
 SLASHIES='0'
