@@ -828,31 +828,29 @@ do
 		fi
 	done
 
-	for jj in $NOAUTO
+    noauto_parent='0'
+    for jj in $NOAUTO
 	do
 		# Ibid regarding iii.
 		jjj="$jj/"
 		
-		# The --recursive switch only matters for non-wild arguments.
-		if [ -z "$opt_recursive" -a "$1" != '//' ]
-		then
-			# Snapshot this dataset non-recursively.
-			print_log debug "Including $ii for regular snapshot."
-			TARGETS_DREGULAR=( ${TARGETS_DREGULAR[@]} $( printf "%s\n" $ii))
-			continue 2
-		# Check whether the candidate name is excluded
-		elif [ "$jjj" = "$iii" ]
-		then
+	    if [ "$jjj" = "$iii" ]
+        then
 			continue 2
 		# Check whether the candidate name is a prefix of any excluded dataset name.
 		elif [ "$jjj" != "${jjj#$iii}" ]
 		then
-			# Snapshot this dataset non-recursively.
-			print_log debug "Including $ii for regular snapshot."
-			TARGETS_DREGULAR=( ${TARGETS_DREGULAR[@]} $( printf "%s\n" $ii))
-			continue 2
-		fi
+		    noauto_parent='1' && break
+        fi
 	done
+
+    # not scrubbing 
+    if [ -z "$opt_recursive" -a "$1" != '//' -o "$noauto_parent" = '1' ]
+    then
+        print_log debug "Including $ii for regular snapshot."
+        TARGETS_DREGULAR=( ${TARGETS_DREGULAR[@]} $( printf "%s\n" $ii))
+        continue
+    fi
 
 	for jj in ${TARGETS_TMP_RECURSIVE[@]}
 	do
@@ -910,7 +908,7 @@ test -n "$opt_dry_run" \
 # expand FS list if replication is not used 
 if [ "$opt_recursive" = ' ' -o "$1" = "//" ]
 then
-    for ii in ${TARGETS_TMP_RECURSIVE[@]}; do TARGETS_DRECURSIVE=( ${TARGETS_DRECURSIVE[@]} $(printf "%s\n" ${ZFS_LOCAL_LIST[@]} | grep ^$ii) ); done
+    for ii in ${TARGETS_TMP_RECURSIVE[@]}; do TARGETS_DRECURSIVE=( ${TARGETS_DRECURSIVE[@]} $(printf "$ii\n") $(printf "%s\n" ${ZFS_LOCAL_LIST[@]} | grep ^"$ii/") ); done
 else
     TARGETS_DRECURSIVE=( ${TARGETS_TMP_RECURSIVE[@]} )
 fi
