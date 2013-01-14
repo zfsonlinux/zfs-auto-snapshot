@@ -107,7 +107,7 @@ print_usage ()
   -R, --replication  Use zfs's replication (zfs send -R) instead of simple send over newly created snapshots (check man zfs for details).
                      -f is used automatically. 
   -v, --verbose      Print info messages.
-  -f, --force        Passes -F argument to zfs receive
+  -f, --force        Passes -F argument to zfs receive (e.g. makes possible to overwrite remote filesystem during --send-full)
       name           Filesystem and volume names, or '//' for all ZFS datasets.
 " 
 }
@@ -281,16 +281,14 @@ do_send ()
     local REMOTEFS="$5"
     local list_child=('')
 
-    if [ "$SENDFLAGS" = "-R" ]; then
-        # for full send with -R, target filesystem must be without snapshots including chilren as well
-        list_child=($(printf "%s\n" "${SNAPSHOTS_OLD_REM[@]}" | grep ^"$REMOTEFS" | grep @))
-        if [ "$SENDTYPE" = "full" ]; then
-            list_child=( "${list_child[@]}" $(printf "%s\n" "${ZFS_REMOTE_LIST[@]}" | grep ^"$REMOTEFS" | sort -r ))
-        fi
-    elif [ "$SENDTYPE" = "full" ]; then
-        list_child=( $(printf "%s\n" "${SNAPSHOTS_OLD_REM[@]}" | grep ^"$REMOTEFS@" ) )
+    if [ "$SENDFLAGS" = "-R" -a "$SENDTYPE" = "full" ]; then
+        # for full send with -R, target filesystem must be with no snapshots (including snapshots on child filesystems)
+        list_child=( $(printf "%s\n" "${SNAPSHOTS_OLD_REM[@]}" | grep ^"$REMOTEFS/" ) )
     fi
-        
+    if [ "$SENDTYPE" = "full" ]; then
+        list_child=( ${list_child[@]} $(printf "%s\n" "${SNAPSHOTS_OLD_REM[@]}" | grep ^"$REMOTEFS@" ) )
+    fi
+
     for ll in ${list_child[@]}; do
         if do_delete "remote" "$ll" ""; then
             continue
@@ -341,7 +339,14 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 
             LAST_REMOTE=$(printf "%s\n" ${SNAPSHOTS_OLD_REM[@]} | grep ^$opt_sendprefix/$ii@ | grep -m1 . | awk -F'@' '{print $2}')
 
-			# remote filesystem just created. if -R run
+            # in case of -R and incremental send, receiving side needs to have $LAST_REMOTE snapshot for each replicated filesystem
+            if [ "$FLAGS" = "-r" ]; then
+                snaps_needed=$(( $(printf "%s\n" ${ZFS_LIST_LOC[@]} | grep ^"$ii/") + 1 )) 
+            else
+                snaps_needed='1'
+            fi
+
+            # remote filesystem just created. if -R run
 			if ! is_member "${CREATED_TARGETS[*]}" "$opt_sendprefix/$ii"
             then  
 				FALLBACK='2'
@@ -349,8 +354,8 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 			then
 				# no snapshot on remote
 				FALLBACK='1'
-			# last snapshot on remote is no more available on local, this applies both for -r and non -r runs
-			elif [ $(printf "%s\n" "${SNAPSHOTS_OLD_REM[@]}" | grep -c -e ^$opt_sendprefix/$ii$SNexp@$LAST_REMOTE ) -ne $(printf "%s\n" "${SNAPSHOTS_OLD_LOC[@]}" | grep -c -e ^$ii$SNexp@$LAST_REMOTE ) ]
+			elif [ "$snaps_needed" -ne $(printf "%s\n" ${SNAPSHOTS_OLD_REM[@]} | grep -c -e ^"$opt_sendprefix/$ii$SNexp@$LAST_REMOTE" ) -o \
+                "$snaps_needed" -ne $(printf "%s\n" ${SNAPSHOTS_OLD_LOC[@]} | grep -c -e ^"$ii$SNexp@$LAST_REMOTE" ) ]
 			then
 				FALLBACK='3'
             else
@@ -365,10 +370,14 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 					print_log info "Going back to full send, remote filesystem was just created: $ii"
 					;;
 				(3)
-					print_log info "Going back to full send, last snapshot on remote is not available on local: $opt_sendprefix/$ii@$LAST_REMOTE"
-					;;
+					if [ "$FLAGS" = "-r" ]; then
+                        print_log info "Going back to full send, last snapshot on remote is not the last one for whole recursion: $opt_sendprefix/$ii@$LAST_REMOTE"
+                    else
+                        print_log info "Going back to full send, last snapshot on remote is not available on local: $opt_sendprefix/$ii@$LAST_REMOTE"
+                    fi
+                    ;;
 				(0)
-					do_send "incr" "$ii@$LAST_REMOTE" "$ii@$NAME" "$sFLAGS" "$opt_sendprefix/$ii"
+					do_send "incr" "$ii@$LAST_REMOTE" "$ii@$NAME" "$sFLAGS" "$opt_sendprefix/$ii" 
 					SND_RC="$?"
 					;;
 			esac
@@ -412,7 +421,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 			continue
 		elif [ "$sFLAGS" = "-R" ]
 		then
-			print_log debug "Replication specified, snapshots were removed while sending."
+			print_log debug "Replication specified, remote snapshots were removed while sending."
 			continue
 		elif [ "$opt_destroy" -eq '1' -a "$FALLBACK" -ne '0' -o "$opt_send" = "full" ]
 		then
@@ -687,12 +696,12 @@ then
 	exit 133
 fi 
 
-if [ -f ${tmp_file_prefix%%X*}* ]; then 
+if [ -f "${tmp_file_prefix%%X*}"* ]; then 
     print_log error "another copy is running ..."
     exit 99
 fi  
-LOCKFILE=`mktemp $tmp_file_prefix`
-trap "rm -f $LOCKFILE; exit $?" INT TERM EXIT
+LOCKFILE=$(mktemp $tmp_file_prefix)
+trap "rm -f '$LOCKFILE'; exit $?" INT TERM EXIT
 
 # Count the number of times '//' appears on the command line.
 SLASHIES='0'
@@ -819,31 +828,29 @@ do
 		fi
 	done
 
-	for jj in $NOAUTO
+    noauto_parent='0'
+    for jj in $NOAUTO
 	do
 		# Ibid regarding iii.
 		jjj="$jj/"
 		
-		# The --recursive switch only matters for non-wild arguments.
-		if [ -z "$opt_recursive" -a "$1" != '//' ]
-		then
-			# Snapshot this dataset non-recursively.
-			print_log debug "Including $ii for regular snapshot."
-			TARGETS_DREGULAR=( ${TARGETS_DREGULAR[@]} $( printf "%s\n" $ii))
-			continue 2
-		# Check whether the candidate name is excluded
-		elif [ "$jjj" = "$iii" ]
-		then
+	    if [ "$jjj" = "$iii" ]
+        then
 			continue 2
 		# Check whether the candidate name is a prefix of any excluded dataset name.
 		elif [ "$jjj" != "${jjj#$iii}" ]
 		then
-			# Snapshot this dataset non-recursively.
-			print_log debug "Including $ii for regular snapshot."
-			TARGETS_DREGULAR=( ${TARGETS_DREGULAR[@]} $( printf "%s\n" $ii))
-			continue 2
-		fi
+		    noauto_parent='1' && break
+        fi
 	done
+
+    # not scrubbing 
+    if [ -z "$opt_recursive" -a "$1" != '//' -o "$noauto_parent" = '1' ]
+    then
+        print_log debug "Including $ii for regular snapshot."
+        TARGETS_DREGULAR=( ${TARGETS_DREGULAR[@]} $( printf "%s\n" $ii))
+        continue
+    fi
 
 	for jj in ${TARGETS_TMP_RECURSIVE[@]}
 	do
@@ -901,7 +908,7 @@ test -n "$opt_dry_run" \
 # expand FS list if replication is not used 
 if [ "$opt_recursive" = ' ' -o "$1" = "//" ]
 then
-    for ii in "${TARGETS_TMP_RECURSIVE[@]}"; do TARGETS_DRECURSIVE=( ${TARGETS_DRECURSIVE[@]} $(printf "%s\n" ${ZFS_LOCAL_LIST[@]} | grep ^$ii) ); done
+    for ii in ${TARGETS_TMP_RECURSIVE[@]}; do TARGETS_DRECURSIVE=( ${TARGETS_DRECURSIVE[@]} $(printf "$ii\n") $(printf "%s\n" ${ZFS_LOCAL_LIST[@]} | grep ^"$ii/") ); done
 else
     TARGETS_DRECURSIVE=( ${TARGETS_TMP_RECURSIVE[@]} )
 fi
