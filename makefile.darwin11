@@ -1,0 +1,7 @@
+
+install:
+
+	install Library/org.zfs.snapshot.hourly.plist /Library/LaunchDaemons/org.zfs.snapshot.hourly.plist
+	install src/zfs-auto-snapshot.sh /usr/sbin/zfs-auto-snapshot.sh
+	launchctl load -w /Library/LaunchDaemons/org.zfs.snapshot.hourly.plist
+
