@@ -113,6 +113,7 @@ print_usage ()
     -X, --destroy      Destroy remote snapshots to allow --send-full if 
                        destination has snapshots (needed for -F in case 
                        incremental snapshots on local and remote do not match).
+                       -f is used automatically.
     -F, --fallback     Allow fallback from --send-incr to --send-full, 
                        if incremental sending is not possible (filesystem 
                        on remote just created or snapshots do not match - 
@@ -131,6 +132,8 @@ print_usage ()
     -a, --base         Base unit for hanoi cycle. Can be minute, hour, day, 
                        week, month or year (should follow your cron schedule 
                        frequency). Default base is day.
+    --local-only       Parameters opt_sendtocmd and opt_buffer are not used,
+                       target for --send will be local machine.
       name           Filesystem and volume names, or '//' for all ZFS datasets.
 " 
 }
@@ -305,6 +308,7 @@ do_send ()
 	local SENDFLAGS="$4"
 	local REMOTEFS="$5"
 	local list_child=''
+	local lq=''
 
 	if [ "$SENDFLAGS" = "-R" -a "$SENDTYPE" = "full" ]; then
 		# for full send with -R, target filesystem must be with no snapshots (including snapshots on child filesystems)
@@ -323,27 +327,14 @@ do_send ()
 		print_log debug "Can't destroy remote objects $REMOTEFS ($ll). Can't continue with send-full. -X allowed?"
 		return 1
 	done
+	
+	test -n "$opt_buffer" && lq="'"
 
-	test $SENDTYPE = "incr" && do_run "zfs send " "$SENDFLAGS" "$opt_atonce  $SNAPFROM   $SNAPTO" "$opt_pipe" "$opt_sendtocmd" "'$opt_buffer zfs recv  $opt_force -u $REMOTEFS'"
-	test $SENDTYPE = "full" && do_run "zfs send " "$SENDFLAGS" "$SNAPTO" "$opt_pipe" "$opt_sendtocmd" "'$opt_buffer zfs recv $opt_force -u $REMOTEFS'"
+	test $SENDTYPE = "incr" && do_run "zfs send " "$SENDFLAGS" "$opt_atonce  $SNAPFROM   $SNAPTO" "$opt_pipe" "$opt_sendtocmd" "$lq$opt_buffer zfs recv  $opt_force -u $REMOTEFS$lq"
+	test $SENDTYPE = "full" && do_run "zfs send " "$SENDFLAGS" "$SNAPTO" "$opt_pipe" "$opt_sendtocmd" "$lq$opt_buffer zfs recv $opt_force -u $REMOTEFS$lq"
 
 	return "$RC"
 }
-
-pow () 
-{
-	local x="$1"
-	local y="$2"
-	local result='1' 
-	local i='1'	   
-
-	while [ "$i" -le "$y" ]; do
-		result=$(( result * x ))		  
-		i=$(( i + 1 ))					  
-	done		
-
-	echo $result									   
-} 
 
 delete_rotation_hanoi ()
 {
@@ -353,8 +344,9 @@ delete_rotation_hanoi ()
 	local FSNAME="$3"
 	local GLOB="$4"
 	local FLAGS="$5"
+	local SNAPNAME="$6"
 
-	local base_minute='60'
+	local base_minute=$((60 * $opt_factor ))
 	local base_hour=$(($base_minute * 60))
 	local base_day=$(($base_hour * 24))
 	local base_week=$(($base_day * 7))
@@ -362,28 +354,28 @@ delete_rotation_hanoi ()
 	local base="base_$opt_base"
 
 	local opt_hbase=$(eval echo \$$base)
-	opt_hbase=$(($opt_hbase / $opt_factor ))
-
-	isclass ()
-	{
-		if [ "$2" = $opt_keep ]; then
-			return 0
-		fi
-		local remainder=$(pow 2 $(( $2 - 1 )) )
-		local divisor=$(($remainder * 2))
-
-		test $(($1 % $divisor)) -eq $remainder 
-	}
 
 	classify ()
 	{
+		rec () 
+		{
+			local class='0'
+			local nr="$1"
+
+			while test $(( 1 << $(($class)) )) -le $(($nr>>1)); do
+				class=$(($class+1))
+			done
+			bla=$(($nr - $(( 1 << $(($class)) )) ))
+			test "$bla" -eq '0' && echo $(($class+1)) || rec "$bla" 
+		}
+
 		local creation="$1"
 		local creation_std=''
 		local snapdate=''
 
 		case $PLATFORM_LOC in
 			(Linux)
-				snapdate=$(echo "$creation" | awk -F'-' '{print $1"-"$2"-"$3" "$4$5}')
+				snapdate=$(echo "$creation" | awk -F'-' '{print $1"-"$2"-"$3" "$4}')
 				creation_std=$(($(env LC_ALL=C date -d "$snapdate" +%s ) /  $opt_hbase ))
 				;;
 			(Darwin)
@@ -391,13 +383,7 @@ delete_rotation_hanoi ()
 				;;
 		esac
 
-		local class="1"
-		# Find the class $creation_std belongs to.
-		while ! isclass $creation_std $class; do
-			class=$(($class+1))
-		done
-
-		echo "$class" 
+		echo $(rec $creation_std)
 	}
 
 	destroy ()
@@ -427,10 +413,9 @@ delete_rotation_hanoi ()
 
 	}
 
-	
-	destroy "$SNAPSHOTS_OLD_LOC" "" "local" "$FSNAME" "$FLAGS"
+	destroy "$(printf "%s\n%s\n" "$SNAPSHOTS_OLD_LOC" "$FSNAME@$SNAPNAME" )" "" "local" "$FSNAME" "$FLAGS"
 	if [ "$SND_RC" -eq '0' ] && [ "$opt_send" != "no" ]; then
-		destroy "$SNAPSHOTS_OLD_REM" "$opt_sendprefix/" "remote" "$FSNAME" "$FLAGS"		
+		destroy "$(printf "%s\n%s\n" "$SNAPSHOTS_OLD_LOC" "$opt_sendprefix/$FSNAME@$SNAPNAME" )" "$opt_sendprefix/" "remote" "$FSNAME" "$FLAGS"		
 	fi
 
 }
@@ -586,7 +571,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 				delete_rotation_rr "$SND_RC" "$FALLBACK" "$ii" "$GLOB" "$FLAGS"
 				;;
 			(hanoi)
-				delete_rotation_hanoi "$SND_RC" "$FALLBACK" "$ii" "$GLOB" "$FLAGS"
+				delete_rotation_hanoi "$SND_RC" "$FALLBACK" "$ii" "$GLOB" "$FLAGS" "$NAME"
 				;;
 		esac
 
@@ -664,7 +649,7 @@ case "$PLATFORM_LOC" in
 esac
 
 GETOPT=$("$getopt_cmd" \
-	--longoptions=default-exclude,dry-run,skip-scrub,recursive,send-atonce,rotation: \
+	--longoptions=default-exclude,dry-run,skip-scrub,recursive,send-atonce,rotation:,local-only \
 	--longoptions=event:,keep:,label:,prefix:,sep:,create,fallback,rollback,base:,factor: \
 	--longoptions=debug,help,quiet,syslog,verbose,send-full:,send-incr:,remove-local:,destroy \
 	--options=dnshe:l:k:p:rs:qgvfixcXFRbao \
@@ -712,6 +697,11 @@ do
 		(-h|--help)
 			print_usage
 			exit 0
+			;;
+		(--local-only)
+			opt_sendtocmd=''
+			opt_buffer=''
+			shift 1
 			;;
 		(-k|--keep)
 			if ! test "$2" -gt '0' 2>/dev/null
@@ -789,6 +779,7 @@ do
 			;;
 		(-X|--destroy)
 			opt_destroy='1'
+			opt_force='-F'
 			shift 1
 			;;
 		(-F|--fallback)
@@ -878,6 +869,10 @@ then
 	exit 133
 fi 
 
+# ISO style date; fifteen characters: YYYY-MM-DD-HHMM
+# On Solaris %H%M expands to 12h34.
+DATE=$(date +%F-%H%M)
+
 COUNTER='0'
 while [ -e "${tmp_file_prefix%%X*}"* ]; do 
 	print_log error "another copy is running ... $COUNTER"
@@ -886,7 +881,7 @@ while [ -e "${tmp_file_prefix%%X*}"* ]; do
 	COUNTER=$(( $COUNTER + 1 ))
 done  
 LOCKFILE=$(mktemp "$tmp_file_prefix")
-trap "rm -f '$LOCKFILE'; exit $?" INT TERM EXIT
+trap "rm -f '$LOCKFILE'" INT TERM EXIT
 
 # Count the number of times '//' appears on the command line.
 SLASHIES='0'
@@ -1064,10 +1059,6 @@ done
 # because the SUNW program does. The dash character is the default.
 SNAPPROP="-o com.sun:auto-snapshot-desc='$opt_event'"
 
-# ISO style date; fifteen characters: YYYY-MM-DD-HHMM
-# On Solaris %H%M expands to 12h34.
-DATE=$(date +%F-%H%M)
-
 # if hanoi rotation was requested but prefix or label wasn't changed from default, change label to hanoi to avoid mixing of those backup sets.
 if [ "$opt_namechange" -eq '0' ] && [ "$opt_rotation" = "hanoi" ]; then
 	opt_label="hanoi_regular"
@@ -1123,17 +1114,18 @@ then
 
 	MOUNTED_LIST_REM=$(eval do_getmountedfs "remote")
 
-	SNAPSHOTS_OLD_REM=$(eval "$opt_sendtocmd" zfs list -r -H -t snapshot -S creation -o name "$opt_sendprefix") \
-		|| { print_log error "zfs list $?: $SNAPSHOTS_OLD_REM"; exit 140; }
-
 	ZFS_REMOTE_LIST=$(eval "$opt_sendtocmd" zfs list -H -t filesystem,volume -s name -o name) \
 		|| { print_log error "$opt_sendtocmd zfs list $?: $ZFS_REMOTE_LIST"; exit 139; }
+
+	if [ "$opt_create" -eq '1' ]; then
+		do_createfs "$TARGETS_DREGULAR"
+		do_createfs "$TARGETS_DRECURSIVE"
+	fi
+	
+	SNAPSHOTS_OLD_REM=$(eval "$opt_sendtocmd" zfs list -r -H -t snapshot -S creation -o name "$opt_sendprefix") \
+		|| { print_log error "zfs remote list $?: $SNAPSHOTS_OLD_REM"; exit 140; }
 fi
 
-if [ "$opt_create" -eq '1' -a "$opt_send" != "no" ]; then
-	do_createfs "$TARGETS_DREGULAR"
-	do_createfs "$TARGETS_DRECURSIVE"
-fi
 
 do_snapshots "$SNAPPROP" "" "$SNAPNAME" "$SNAPGLOB" "$TARGETS_DREGULAR"
 do_snapshots "$SNAPPROP" "$opt_recursive" "$SNAPNAME" "$SNAPGLOB" "$TARGETS_DRECURSIVE"
