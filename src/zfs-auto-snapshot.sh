@@ -621,7 +621,7 @@ do_createfs ()
 		then
 			print_log debug "creating: $opt_sendprefix/$ii"
 
-			if do_run "$opt_sendtocmd" "zfs create $opt_sendprefix/$ii"
+			if do_run "$opt_sendtocmd" "zfs create -p -o canmount=off -o snapdir=hidden $opt_sendprefix/$ii"
 			then 
 				CREATION_COUNT=$(( $CREATION_COUNT + 1 ))
 				CREATED_TARGETS=$(printf "%s\n%s\n" "$CREATED_TARGETS" "$opt_sendprefix/$ii" )
