@@ -652,7 +652,7 @@ GETOPT=$("$getopt_cmd" \
 	--longoptions=default-exclude,dry-run,skip-scrub,recursive,send-atonce,rotation:,local-only \
 	--longoptions=event:,keep:,label:,prefix:,sep:,create,fallback,rollback,base:,factor: \
 	--longoptions=debug,help,quiet,syslog,verbose,send-full:,send-incr:,remove-local:,destroy \
-	--options=dnshe:l:k:p:rs:qgvfixcXFRbao \
+	--options=dnshe:l:k:p:rs:qgvfixcXFRba:o: \
 	-- "$@" ) \
 	|| exit 128
 
