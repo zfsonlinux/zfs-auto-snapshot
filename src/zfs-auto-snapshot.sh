@@ -1077,10 +1077,10 @@ fi
 print_log debug "$msg_to_log."
 
 test -n "$TARGETS_DREGULAR" && \
-	print_log info "Doing regular snapshots of $(echo "$TARGETS_DREGULAR")"
+	print_log info "Doing regular snapshots of $(echo $TARGETS_DREGULAR)"
 
 test -n "$TARGETS_TMP_RECURSIVE" && \
-	print_log info "Doing recursive snapshots of $(echo "$TARGETS_TMP_RECURSIVE")"
+	print_log info "Doing recursive snapshots of $(echo $TARGETS_TMP_RECURSIVE)"
 
 SNAPSHOTS_OLD_LOC=$(env LC_ALL=C zfs list -r -H -t snapshot -S creation -o name $(echo "$TARGETS_DREGULAR") $(echo "$TARGETS_TMP_RECURSIVE") ) \
 	|| { print_log error "zfs list $?: $SNAPSHOTS_OLD_LOC"; exit 137; }
