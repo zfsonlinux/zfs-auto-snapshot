@@ -640,7 +640,11 @@ case "$PLATFORM_LOC" in
 		getopt_cmd='getopt'
 		;;
 	(Darwin)
+		# macports path as default. Homebrew as fallback
 		getopt_cmd='/opt/local/bin/getopt'
+		if [ ! -f $getopt_cmd ]; then
+			getopt_cmd='/usr/local/opt/gnu-getopt/bin/getopt'
+		fi
 		;;
 	(*)
 		print_log error "Local system not known ($PLATFORM_LOC) - needs one of Darwin, Linux. Exiting."
