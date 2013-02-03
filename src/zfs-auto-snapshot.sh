@@ -146,41 +146,41 @@ print_log () # level, message, ...
 
 	case $LEVEL in
 		(eme*)
-			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.emerge $*
-			echo Emergency: $* 1>&2
+			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.emerge "$*"
+			echo Emergency: "$*" 1>&2
 			;;
 		(ale*)
-			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.alert $*
-			echo Alert: $* 1>&2
+			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.alert "$*"
+			echo Alert: "$*" 1>&2
 			;;
 		(cri*)
-			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.crit $*
-			echo Critical: $* 1>&2
+			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.crit "$*"
+			echo Critical: "$*" 1>&2
 			;;
 		(err*)
-			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.err $*
-			echo Error: $* 1>&2
+			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.err "$*"
+			echo Error: "$*" 1>&2
 			;;
 		(war*)
-			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.warning $*
-			test -z "$opt_quiet" && echo Warning: $* 1>&2
+			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.warning "$*"
+			test -z "$opt_quiet" && echo Warning: "$*" 1>&2
 			WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
 			;;
 		(not*)
-			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.notice $*
-			test -z "$opt_quiet" && echo $*
+			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.notice "$*"
+			test -z "$opt_quiet" && echo "$*"
 			;;
 		(inf*)
-			# test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.info $*
-			test -n "$opt_verbose" && echo $*
+			# test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.info "$*"
+			test -n "$opt_verbose" && echo "$*"
 			;;
 		(deb*)
-			# test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.debug $*
-			test -n "$opt_debug" && echo Debug: $*
+			# test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.debug "$*"
+			test -n "$opt_debug" && echo Debug: "$*"
 			;;
 		(*)
-			test -n "$opt_syslog" && logger -t "$opt_prefix" $*
-			echo $* 1>&2
+			test -n "$opt_syslog" && logger -t "$opt_prefix" "$*"
+			echo "$*" 1>&2
 			;;
 	esac
 }
