@@ -3,7 +3,9 @@
 # zfs-auto-snapshot for Linux and Macosx
 # Automatically create, rotate, and destroy periodic ZFS snapshots.
 # Copyright 2011 Darik Horn <dajhorn@vanadac.com>
-# zfs send options and macosx relevant changes by Matus Kral <matuskral@me.com>
+#
+# zfs send, hanoi rotation, macosx/linux multiplatform changes -  
+# Matus Kral <matuskral@me.com>
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
