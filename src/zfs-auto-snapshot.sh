@@ -82,7 +82,7 @@ MOUNTED_LIST_LOC=''
 MOUNTED_LIST_REM=''
 RC='99'
 
-tmp_file_prefix="/tmp/zfs-auto-snapshot.XXXXXXXX"
+tmp_dir="/tmp/zfs-auto-snapshot.lock"
 
 print_usage ()
 {
@@ -878,14 +878,14 @@ fi
 DATE=$(date +%F-%H%M)
 
 COUNTER='0'
-while [ -e "${tmp_file_prefix%%X*}"* ]; do 
+while true; do
+	if do_run "mkdir '${tmp_dir}'"; then break; fi  
 	print_log error "another copy is running ... $COUNTER"
 	test "$COUNTER" -gt '11' && exit 99
 	sleep 5
 	COUNTER=$(( $COUNTER + 1 ))
 done  
-LOCKFILE=$(mktemp "$tmp_file_prefix")
-trap "rm -f '$LOCKFILE'" INT TERM EXIT
+trap "rm -fr '${tmp_dir}'" INT TERM EXIT
 
 # Count the number of times '//' appears on the command line.
 SLASHIES='0'
