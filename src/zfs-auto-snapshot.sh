@@ -53,6 +53,7 @@ opt_rotation='rr'
 opt_base='day'
 opt_namechange='0'
 opt_factor='1'
+opt_limit='3'
 
 # if pipe needs to be used, uncomment opt_pipe="|". arcfour or blowfish will reduce cpu load caused by ssh and mbuffer will 
 # boost network bandwidth and mitigate low and high peaks during transfer
@@ -1117,6 +1118,22 @@ then
 			exit 301
 			;;
 	esac
+	
+	if [ -n $opt_limit ]; then
+		runs='1'
+		condition='1'
+		while ( $condition -eq '1' ); do
+			load=$(eval "$opt_sendtocmd" "uptime")
+			load=$(echo ${load%%\.*} | awk '{print $10}')
+			if [ $load -ge $opt_limit -a $runs -lt '3' ]; then
+				print_log error "Over load limit on remote machine. Going for sleep for 5 minutes. (run #$runs, load still $load)"
+				sleep 300
+			else
+				condition='0'
+			fi
+			runs=$(( $runs + '1' ))
+		done
+	fi
 
 	MOUNTED_LIST_REM=$(eval do_getmountedfs "remote")
 
