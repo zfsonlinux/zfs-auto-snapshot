@@ -1129,12 +1129,15 @@ then
 				print_log error "Over load limit on remote machine. Going for sleep for 5 minutes. (run #$runs, load still $load)"
 				sleep 300
 			else
+				test $load -ge $opt_limit && opt_send="no"
 				condition='0'
 			fi
 			runs=$(( $runs + '1' ))
 		done
 	fi
+fi
 
+if [ "$opt_send" != "no" ]; then
 	MOUNTED_LIST_REM=$(eval do_getmountedfs "remote")
 
 	ZFS_REMOTE_LIST=$(eval "$opt_sendtocmd" zfs list -H -t filesystem,volume -s name -o name) \
