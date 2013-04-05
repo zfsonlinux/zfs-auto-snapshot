@@ -1122,17 +1122,18 @@ then
 	if [ -n $opt_limit ]; then
 		runs='1'
 		condition='1'
-		while ( $condition -eq '1' ); do
+		while [ $condition -eq '1' ]; do
 			load=$(eval "$opt_sendtocmd" "uptime")
-			load=$(echo ${load%%\.*} | awk '{print $10}')
+			load=$(echo ${load##*"load average"}} | awk '{print $2}' | awk -F'.' '{print $1}')
 			if [ $load -ge $opt_limit -a $runs -lt '3' ]; then
 				print_log error "Over load limit on remote machine. Going for sleep for 5 minutes. (run #$runs, load still $load)"
 				sleep 300
 			else
 				test $load -ge $opt_limit && opt_send="no"
+				opt_keep=''
 				condition='0'
 			fi
-			runs=$(( $runs + '1' ))
+			runs=$(( $runs + 1 ))
 		done
 	fi
 fi
