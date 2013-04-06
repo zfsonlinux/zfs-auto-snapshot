@@ -1124,7 +1124,7 @@ then
 		condition='1'
 		while [ $condition -eq '1' ]; do
 			load=$(eval "$opt_sendtocmd" "uptime")
-			load=$(echo ${load##*"load average"}} | awk '{print $2}' | awk -F'.' '{print $1}')
+			load=$(echo ${load##*"load average"} | awk '{print $2}' | awk -F'.' '{print $1}')
 			if [ $load -ge $opt_limit -a $runs -lt '3' ]; then
 				print_log warning "Over load limit on remote machine. Going for sleep for 5 minutes. (run #$runs, load still $load)"
 				sleep 300
