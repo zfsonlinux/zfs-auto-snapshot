@@ -1126,11 +1126,14 @@ then
 			load=$(eval "$opt_sendtocmd" "uptime")
 			load=$(echo ${load##*"load average"}} | awk '{print $2}' | awk -F'.' '{print $1}')
 			if [ $load -ge $opt_limit -a $runs -lt '3' ]; then
-				print_log error "Over load limit on remote machine. Going for sleep for 5 minutes. (run #$runs, load still $load)"
+				print_log warning "Over load limit on remote machine. Going for sleep for 5 minutes. (run #$runs, load still $load)"
 				sleep 300
 			else
-				test $load -ge $opt_limit && opt_send="no"
-				opt_keep=''
+				if [ $load -ge $opt_limit ]; then
+				    opt_send="no"
+				    opt_keep=''
+				    print_log warning "Over load limit on remote machine. Will not send to remote. (run #$runs, load still $load)"
+                fi
 				condition='0'
 			fi
 			runs=$(( $runs + 1 ))
