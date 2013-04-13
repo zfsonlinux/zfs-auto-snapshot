@@ -12,8 +12,9 @@ It can backup (send) the snapshots to remote systems or external disks,
 utilizing zfs send command. On darwin this can replace TimeMachine backups,
 currently not running on top of ZFS filesystems.
 
-This program is a posixly correct bourne shell script. It depends on zfs utilities
-only (Linux). Unfortunatelly on Darwin it needs 'getopt' from macports.
+This program is a posixly correct bourne shell script. It depends on zfs
+utilities only (Linux). Unfortunatelly on Darwin it needs 'getopt' from 
+macports or homebrew.
 
 For using --send option, adapt opt_sendtocmd variable accordingly by editing the
 script zfs-auto-snapshot.sh.
