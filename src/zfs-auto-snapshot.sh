@@ -416,9 +416,11 @@ delete_rotation_hanoi ()
 
 	}
 
-	destroy "$(printf "%s\n%s\n" "$SNAPSHOTS_OLD_LOC" "$FSNAME@$SNAPNAME" )" "" "local" "$FSNAME" "$FLAGS"
-	if [ "$SND_RC" -eq '0' ] && [ "$opt_send" != "no" ]; then
-		destroy "$(printf "%s\n%s\n" "$SNAPSHOTS_OLD_REM" "$opt_sendprefix/$FSNAME@$SNAPNAME" )" "$opt_sendprefix/" "remote" "$FSNAME" "$FLAGS"		
+	if [ "$SND_RC" -eq '0' -a "$opt_send" != "no" -o "$opt_send" = "no" ]; then
+		destroy "$(printf "%s\n%s\n" "$SNAPSHOTS_OLD_LOC" "$FSNAME@$SNAPNAME" )" "" "local" "$FSNAME" "$FLAGS"
+		if [ "$opt_send" != "no" ]; then
+			destroy "$(printf "%s\n%s\n" "$SNAPSHOTS_OLD_REM" "$opt_sendprefix/$FSNAME@$SNAPNAME" )" "$opt_sendprefix/" "remote" "$FSNAME" "$FLAGS"		
+		fi
 	fi
 
 }
