@@ -54,6 +54,7 @@ opt_base='day'
 opt_namechange='0'
 opt_factor='1'
 opt_limit='3'
+opt_includeall='0'
 
 # if pipe needs to be used, uncomment opt_pipe="|". arcfour or blowfish will reduce cpu load caused by ssh and mbuffer will 
 # boost network bandwidth and mitigate low and high peaks during transfer
@@ -93,6 +94,8 @@ print_usage ()
 
     --default-exclude  Exclude datasets if com.sun:auto-snapshot is unset
                        (not explicitly set to true).
+    --include-all      Include datasets even if com.sun:auto-snapshot is set
+                       to false.
     --remove-local=n   Remove local snapshots after successfully sent via 
                        --send-incr or --send-full but still keeps n newest
                        snapshots (this will destroy snapshots named according
@@ -661,7 +664,7 @@ esac
 GETOPT=$("$getopt_cmd" \
 	--longoptions=default-exclude,dry-run,skip-scrub,recursive,send-atonce,rotation:,local-only \
 	--longoptions=event:,keep:,label:,prefix:,sep:,create,fallback,rollback,base:,factor: \
-	--longoptions=debug,help,quiet,syslog,verbose,send-full:,send-incr:,remove-local:,destroy \
+	--longoptions=debug,help,quiet,syslog,verbose,send-full:,send-incr:,remove-local:,destroy,include-all \
 	--options=dnshe:l:k:p:rs:qgvfixcXFRba:o: \
 	-- "$@" ) \
 	|| exit 128
@@ -711,6 +714,11 @@ do
 		(--local-only)
 			opt_sendtocmd=''
 			opt_buffer=''
+			shift 1
+			;;
+		(--include-all)
+			opt_includeall='1'
+			print_log debug "Not considering com.sun:auto-snapshot."
 			shift 1
 			;;
 		(-k|--keep)
@@ -943,21 +951,25 @@ ZPOOLS_NOTREADY=$(echo "$ZPOOL_STATUS" | awk -F ': ' \
 	$1 ~ /^ *state$/ && $2 !~ /ONLINE|DEGRADED/ { print pool } ' \
 	| sort )
 
-# Get a list of datasets for which snapshots are not explicitly disabled.
-CANDIDATES=$(echo "$ZFS_LIST" | awk -F '\t' \
-	'tolower($2) !~ /false/ && tolower($3) !~ /false/ {print $1}' )
-
 # If the --default-exclude flag is set, then exclude all datasets that lack
 # an explicit com.sun:auto-snapshot* property. Otherwise, include them.
-if [ -n "$opt_default_exclude" ]
-then
-	# Get a list of datasets for which snapshots are not explicitly enabled.
-	NOAUTO=$(echo "$ZFS_LIST" | awk -F '\t' \
-		'tolower($2) !~ /true/ && tolower($3) !~ /true/ {print $1}')
+if [ "$opt_includeall" -eq '0' ]; then 
+	# Get a list of datasets for which snapshots are not explicitly disabled.
+	CANDIDATES=$(echo "$ZFS_LIST" | awk -F '\t' \
+		'tolower($2) !~ /false/ && tolower($3) !~ /false/ {print $1}' )
+
+	if [ -n "$opt_default_exclude" ]
+	then
+		# Get a list of datasets for which snapshots are not explicitly enabled.
+		NOAUTO=$(echo "$ZFS_LIST" | awk -F '\t' \
+			'tolower($2) !~ /true/ && tolower($3) !~ /true/ {print $1}')
+	else
+		# Get a list of datasets for which snapshots are explicitly disabled.
+		NOAUTO=$(echo "$ZFS_LIST" | awk -F '\t' \
+			'tolower($2) ~ /false/ || tolower($3) ~ /false/ {print $1}')
+	fi 
 else
-	# Get a list of datasets for which snapshots are explicitly disabled.
-	NOAUTO=$(echo "$ZFS_LIST" | awk -F '\t' \
-		'tolower($2) ~ /false/ || tolower($3) ~ /false/ {print $1}')
+	CANDIDATES=$(echo "$ZFS_LIST" | awk -F '\t' '{print $1}')
 fi
 
 # Initialize the list of datasets that will get a recursive snapshot.
