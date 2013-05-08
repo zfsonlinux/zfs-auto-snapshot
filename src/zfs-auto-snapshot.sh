@@ -91,7 +91,8 @@ print_usage ()
 {
     echo "Usage: $0 [options] [-l label] <'//' | name [name...]>
 
-    --default-exclude  Exclude datasets if com.sun:auto-snapshot is unset.
+    --default-exclude  Exclude datasets if com.sun:auto-snapshot is unset
+                       (not explicitly set to true).
     --remove-local=n   Remove local snapshots after successfully sent via 
                        --send-incr or --send-full but still keeps n newest
                        snapshots (this will destroy snapshots named according
