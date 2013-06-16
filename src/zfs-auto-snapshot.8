@@ -1,0 +1,70 @@
+.TH ZFS-AUTO-SNAPSHOT "8" "June 16, 2013" "zfs-auto-snapshot.sh" "System Administration Commands"
+.SH NAME
+zfs-auto-snapshot \- take regular ZFS snapshots
+.SH SYNOPSIS
+.B zfs-auto-snapshot
+[\fIoptions\fR] [\fI-l label\fR] \fI<'//' | name \fR[\fIname\fR...]\fI>\fR
+.SH DESCRIPTION
+.B zfs-auto-snapshot
+automatically creates, rotates, and destroys snapshots for all your
+ZFS datasets, and is compatible with both zfsonlinux and zfs-fuse.
+.SH OPTIONS
+.TP
+\fB\-\-default\-exclude\fR
+By default \fBzfs-auto-snapshot\fR will snapshot all datasets except
+for those in which the user-property \fBcom.sun:auto-snapshot\fR is
+set to \fBfalse\fR.  This option reverses the behavior and requires
+\fBcom.sun:auto-snapshot\fR to be set to \fBtrue\fR.
+.TP
+\fB\-d\fR, \fB\-\-debug\fR
+Print debugging messages.
+.TP
+\fB\-e\fR, \fB\-\-event\fR=\fIEVENT\fR
+Set the com.sun:auto\-snapshot\-desc property to EVENT.
+.TP
+\fB\-\-fast\fR
+Use a faster zfs list invocation.
+.TP
+\fB\-n\fR, \fB\-\-dry\-run\fR
+Print actions without actually doing anything.
+.TP
+\fB\-s\fR, \fB\-\-skip\-scrub\fR
+Do not snapshot filesystems in scrubbing pools.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print the usage message.
+.TP
+\fB\-k\fR, \fB\-\-keep\fR=\fINUM\fR
+Keep NUM recent snapshots and destroy older snapshots.
+.TP
+\fB\-l\fR, \fB\-\-label\fR=\fILAB\fR
+LAB is usually 'hourly', 'daily', or 'monthly'.
+.TP
+\fB\-p\fR, \fB\-\-prefix\fR=\fIPRE\fR
+PRE is 'zfs\-auto\-snap' by default.
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Suppress warnings and notices at the console.
+.TP
+\fB\-\-send\-full\fR=\fIF\fR
+Send zfs full backup. Unimplemented.
+.TP
+\fB\-\-send\-incr\fR=\fIF\fR
+Send zfs incremental backup. Unimplemented.
+.TP
+\fB\-\-sep\fR=\fICHAR\fR
+Use CHAR to separate date stamps in snapshot names.
+.TP
+\fB\-g\fR, \fB\-\-syslog\fR
+Write messages into the system log.
+.TP
+\fB\-r\fR, \fB\-\-recursive\fR
+Snapshot named filesystem and all descendants.
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Print info messages.
+.TP
+name
+Filesystem and volume names, or '//' for all ZFS datasets.
+.SH SEE ALSO
+.BR zfs (8)
