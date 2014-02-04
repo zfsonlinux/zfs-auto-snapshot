@@ -148,7 +148,8 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 	local GLOB="$4"
 	local TARGETS="$5"
 	local KEEP=''
-
+	local LABEL="$6"
+	
 	# global DESTRUCTION_COUNT
 	# global SNAPSHOT_COUNT
 	# global WARNING_COUNT
@@ -168,17 +169,20 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 		# including the one that was just recently created.
 		test -z "$opt_keep" && continue
 		KEEP="$opt_keep"
-
+		
 		# ASSERT: The old snapshot list is sorted by increasing age.
-		for jj in $SNAPSHOTS_OLD
+		while IFS='	' read -ra arrjj
 		do
 			# Check whether this is an old snapshot of the filesystem.
-			if [ -z "${jj#$ii@$GLOB}" ]
+			if [ -z "${arrjj[0]#$ii@$GLOB}" ]
 			then
+				# Check whether the snapshot has the same label property
+				test "${arrjj[1]}" = "$LABEL" || continue
+			
 				KEEP=$(( $KEEP - 1 ))
 				if [ "$KEEP" -le '0' ]
 				then
-					if do_run "zfs destroy $FLAGS '$jj'" 
+					if do_run "zfs destroy $FLAGS '${arrjj[0]}'" 
 					then
 						DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
 					else
@@ -186,7 +190,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 					fi
 				fi
 			fi
-		done
+		done <<< "$SNAPSHOTS_OLD"
 	done
 }
 
@@ -345,14 +349,9 @@ ZFS_LIST=$(env LC_ALL=C zfs list -H -t filesystem,volume -s name \
   -o name,com.sun:auto-snapshot,com.sun:auto-snapshot:"$opt_label") \
   || { print_log error "zfs list $?: $ZFS_LIST"; exit 136; }
 
-if [ -n "$opt_fast_zfs_list" ]
-then
-	SNAPSHOTS_OLD=$(env LC_ALL=C zfs list -H -t snapshot -o name -s name|grep $opt_prefix |awk '{ print substr( $0, length($0) - 14, length($0) ) " " $0}' |sort -r -k1,1 -k2,2|awk '{ print substr( $0, 17, length($0) )}') \
-	  || { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
-else
-	SNAPSHOTS_OLD=$(env LC_ALL=C zfs list -H -t snapshot -S creation -o name) \
-	  || { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
-fi
+# LCA note: --fast option is now broken & ignored
+SNAPSHOTS_OLD=$(zfs list -H -t snapshot -S creation -o name,com.sun:auto-snapshot-label) \
+  || { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
 
 # Verify that each argument is a filesystem or volume.
 for ii in "$@"
@@ -500,17 +499,17 @@ done
 
 # Linux lacks SMF and the notion of an FMRI event, but always set this property
 # because the SUNW program does. The dash character is the default.
-SNAPPROP="-o com.sun:auto-snapshot-desc='$opt_event'"
+SNAPPROP="-o com.sun:auto-snapshot-desc='$opt_event' -o com.sun:auto-snapshot-label=$opt_label"
 
 # ISO style date; fifteen characters: YYYY-MM-DD-HHMM
 # On Solaris %H%M expands to 12h34.
 DATE=$(date --utc +%F-%H%M)
 
 # The snapshot name after the @ symbol.
-SNAPNAME="$opt_prefix${opt_label:+$opt_sep$opt_label-$DATE}"
+SNAPNAME="$opt_prefix$opt_sep$DATE"
 
 # The expression for matching old snapshots.  -YYYY-MM-DD-HHMM
-SNAPGLOB="$opt_prefix${opt_label:+?$opt_label}????????????????"
+SNAPGLOB="${opt_prefix}????????????????"
 
 test -n "$TARGETS_REGULAR" \
   && print_log info "Doing regular snapshots of $TARGETS_REGULAR"
@@ -521,8 +520,8 @@ test -n "$TARGETS_RECURSIVE" \
 test -n "$opt_dry_run" \
   && print_log info "Doing a dry run. Not running these commands..."
 
-do_snapshots "$SNAPPROP" ""   "$SNAPNAME" "$SNAPGLOB" "$TARGETS_REGULAR"
-do_snapshots "$SNAPPROP" "-r" "$SNAPNAME" "$SNAPGLOB" "$TARGETS_RECURSIVE"
+do_snapshots "$SNAPPROP" ""   "$SNAPNAME" "$SNAPGLOB" "$TARGETS_REGULAR" "$opt_label"
+do_snapshots "$SNAPPROP" "-r" "$SNAPNAME" "$SNAPGLOB" "$TARGETS_RECURSIVE" "$opt_label"
 
 print_log notice "@$SNAPNAME," \
   "$SNAPSHOT_COUNT created," \
