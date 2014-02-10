@@ -171,18 +171,19 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 		KEEP="$opt_keep"
 		
 		# ASSERT: The old snapshot list is sorted by increasing age.
+		# Match on both $GLOB *and* label.
 		while IFS='	' read -ra arrjj
 		do
 			# Check whether this is an old snapshot of the filesystem.
-			if [ -z "${arrjj[0]#$ii@$GLOB}" ]
+			if [ -z "${arrjj[1]#$ii@$GLOB}" ]
 			then
 				# Check whether the snapshot has the same label property
-				test "${arrjj[1]}" = "$LABEL" || continue
+				test "${arrjj[0]}" = "$LABEL" || continue
 			
 				KEEP=$(( $KEEP - 1 ))
 				if [ "$KEEP" -le '0' ]
 				then
-					if do_run "zfs destroy $FLAGS '${arrjj[0]}'" 
+					if do_run "zfs destroy $FLAGS '${arrjj[1]}'" 
 					then
 						DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
 					else
@@ -349,9 +350,14 @@ ZFS_LIST=$(env LC_ALL=C zfs list -H -t filesystem,volume -s name \
   -o name,com.sun:auto-snapshot,com.sun:auto-snapshot:"$opt_label") \
   || { print_log error "zfs list $?: $ZFS_LIST"; exit 136; }
 
-# LCA note: --fast option is now broken & ignored
-SNAPSHOTS_OLD=$(zfs list -H -t snapshot -S creation -o name,com.sun:auto-snapshot-label) \
-  || { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
+if [ -n "$opt_fast_zfs_list" ]
+then
+	SNAPSHOTS_OLD=$(env LC_ALL=C zfs list -H -t snapshot -o com.sun:auto-snapshot-label,name -s name|grep $opt_prefix |awk '{ print substr( $0, length($0) - 14, length($0) ) " " $0}' |sort -r -k1,1 -k3,2|awk '{ print substr( $0, 17, length($0) )}') \
+	  || { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
+else
+	SNAPSHOTS_OLD=$(env LC_ALL=C zfs list -H -t snapshot -S creation -o com.sun:auto-snapshot-label,name) \
+	  || { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
+fi
 
 # Verify that each argument is a filesystem or volume.
 for ii in "$@"
