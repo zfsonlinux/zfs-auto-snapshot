@@ -1,3 +1,20 @@
+zfs-auto-snapshot (1.1.0-0ubuntu1) unstable; urgency=low
+
+  [ Markus Heberling ]
+  * Use only name property for zfs list
+
+  [ Darik Horn ]
+  * Add a switch for the fast zfs list invocation.
+
+  [ Mike Swanson ]
+  * Add a manpage
+  * Update Makefile for the manual page
+
+  [ HawkOwl ]
+  * Set the snapshots to use UTC time, which makes the date/time display correctly in Windows 7 Previous Versions.
+
+ -- Darik Horn <dajhorn@vanadac.com>  Mon, 31 Mar 2014 01:48:58 -0500
+
 zfs-auto-snapshot (1.0.8-0ubuntu2) unstable; urgency=low
 
   * Update the debian/control file.
