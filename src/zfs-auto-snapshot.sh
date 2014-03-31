@@ -29,6 +29,7 @@ opt_backup_incremental=''
 opt_default_exclude=''
 opt_dry_run=''
 opt_event='-'
+opt_fast_zfs_list=''
 opt_keep=''
 opt_label=''
 opt_prefix='zfs-auto-snap'
@@ -54,6 +55,7 @@ print_usage ()
   --default-exclude  Exclude datasets if com.sun:auto-snapshot is unset.
   -d, --debug        Print debugging messages.
   -e, --event=EVENT  Set the com.sun:auto-snapshot-desc property to EVENT.
+      --fast         Use a faster zfs list invocation.
   -n, --dry-run      Print actions without actually doing anything.
   -s, --skip-scrub   Do not snapshot filesystems in scrubbing pools.
   -h, --help         Print this usage message.
@@ -193,7 +195,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 # {
 
 GETOPT=$(getopt \
-  --longoptions=default-exclude,dry-run,skip-scrub,recursive \
+  --longoptions=default-exclude,dry-run,fast,skip-scrub,recursive \
   --longoptions=event:,keep:,label:,prefix:,sep: \
   --longoptions=debug,help,quiet,syslog,verbose \
   --options=dnshe:l:k:p:rs:qgv \
@@ -225,6 +227,10 @@ do
 				opt_event="$2"
 			fi
 			shift 2
+			;;
+		(--fast)
+			opt_fast_zfs_list='1'
+			shift 1
 			;;
 		(-n|--dry-run)
 			opt_dry_run='1'
@@ -339,9 +345,14 @@ ZFS_LIST=$(env LC_ALL=C zfs list -H -t filesystem,volume -s name \
   -o name,com.sun:auto-snapshot,com.sun:auto-snapshot:"$opt_label") \
   || { print_log error "zfs list $?: $ZFS_LIST"; exit 136; }
 
-SNAPSHOTS_OLD=$(env LC_ALL=C zfs list -H -t snapshot -S creation -o name) \
-  || { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
-
+if [ -n "$opt_fast_zfs_list" ]
+then
+	SNAPSHOTS_OLD=$(env LC_ALL=C zfs list -H -t snapshot -o name -s name|grep $opt_prefix |awk '{ print substr( $0, length($0) - 14, length($0) ) " " $0}' |sort -r -k1,1 -k2,2|awk '{ print substr( $0, 17, length($0) )}') \
+	  || { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
+else
+	SNAPSHOTS_OLD=$(env LC_ALL=C zfs list -H -t snapshot -S creation -o name) \
+	  || { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
+fi
 
 # Verify that each argument is a filesystem or volume.
 for ii in "$@"
@@ -493,7 +504,7 @@ SNAPPROP="-o com.sun:auto-snapshot-desc='$opt_event'"
 
 # ISO style date; fifteen characters: YYYY-MM-DD-HHMM
 # On Solaris %H%M expands to 12h34.
-DATE=$(date +%F-%H%M)
+DATE=$(date --utc +%F-%H%M)
 
 # The snapshot name after the @ symbol.
 SNAPNAME="$opt_prefix${opt_label:+$opt_sep$opt_label-$DATE}"
