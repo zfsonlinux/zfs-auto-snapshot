@@ -59,6 +59,10 @@ print_usage ()
   -n, --dry-run      Print actions without actually doing anything.
   -s, --skip-scrub   Do not snapshot filesystems in scrubbing pools.
   -h, --help         Print this usage message.
+  -H, --hanoi=INT    Use the hanoi rotation scheme.
+		     INT how frequently the hanoi rotation is being run.
+		     It is a number followed by one of w, d, h, m, s for
+		     weeks, days, hours, minutes or seconds.
   -k, --keep=NUM     Keep NUM recent snapshots and destroy older snapshots.
   -l, --label=LAB    LAB is usually 'hourly', 'daily', or 'monthly'.
   -p, --prefix=PRE   PRE is 'zfs-auto-snap' by default.
@@ -140,6 +144,123 @@ do_run () # [argv]
 }
 
 
+do_rotate () # flags, oldglob, target
+{
+	local FLAGS="$1"
+	local GLOB="$2"
+	local TARGET="$3"
+	local KEEP=''
+
+	# global DESTRUCTION_COUNT
+	# global WARNING_COUNT
+	# global SNAPSHOTS_OLD
+
+	# Retain at most $opt_keep number of old snapshots of this filesystem,
+	# including the one that was just recently created.
+	KEEP="$opt_keep"
+
+	# ASSERT: The old snapshot list is sorted by increasing age.
+	for jj in $SNAPSHOTS_OLD
+	do
+		# Check whether this is an old snapshot of the filesystem.
+		if [ -z "${jj#$TARGET@$GLOB}" ]
+		then
+			KEEP=$(( $KEEP - 1 ))
+			if [ "$KEEP" -le '0' ]
+			then
+				if do_run "zfs destroy $FLAGS '$jj'" 
+				then
+					DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
+				else
+					WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
+				fi
+			fi
+		fi
+	done
+}
+
+
+compute_hanoi_level() # date
+{
+	local DATE="$1"
+	local EPOCH_TIME=''
+	local HANOI_NUM=''
+	local HANOI_LEVEL='1'
+
+	# The h* is because on Solaris %H%M will have generated 12h34
+	EPOCH_TIME=$(date +%s --date="$(echo $DATE | sed 's/-\(..\)h*\(..\)$/ \1:\2/')")
+	HANOI_NUM=$(($EPOCH_TIME / $opt_hanoi));
+	while test "$HANOI_NUM" -ne "0"
+	do
+		case "${HANOI_NUM}" in
+			(*[13579])
+				break
+				;;
+		esac
+		HANOI_LEVEL=$(($HANOI_LEVEL + 1))
+		HANOI_NUM=$(($HANOI_NUM / 2))
+	done
+	echo $HANOI_LEVEL
+}
+
+
+do_hanoi () # flags, oldglob, target
+{
+	local FLAGS="$1"
+	local GLOB="$2"
+	local TARGET="$3"
+	local KEEP=''
+	local HANOI_LEVEL='0'
+	local SNAP_DATE=''
+	local SNAP_LEVEL=''
+	local POSSIBLY_DESTROY=''
+
+	# global DESTRUCTION_COUNT
+	# global WARNING_COUNT
+	# global SNAPSHOTS_OLD
+
+	HANOI_LEVEL=$(compute_hanoi_level "$DATE")
+
+	# Retain at most $opt_keep number of old snapshots of this filesystem,
+	# including the one that was just recently created.
+	KEEP="$opt_keep"
+
+	# ASSERT: The old snapshot list is sorted by increasing age.
+	for jj in $SNAPSHOTS_OLD
+	do
+		# Check whether this is an old snapshot of the filesystem.
+		if [ -z "${jj#$TARGET@$GLOB}" ]
+		then
+			# If younger snapshot was stored for possible
+			# deletion, delete it.
+			if [ -n "$POSSIBLY_DESTROY" ]
+			then
+				if do_run "zfs destroy $FLAGS '$POSSIBLY_DESTROY'"
+				then
+					DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
+				else
+					WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
+				fi
+				POSSIBLY_DESTROY=''
+			fi
+
+			SNAP_DATE=$(echo $jj | sed 's/.*-\(....-..-..-..h*..\)$/\1/')
+			SNAP_LEVEL=$(compute_hanoi_level "$SNAP_DATE")
+			if test "$HANOI_LEVEL" -eq "$SNAP_LEVEL"
+			then
+				# By default the hanoi rotation scheme acts as
+				# though there are an infinite number of
+				# disks.  So instead of immediately destroying
+				# this snapshot, remember it as possibly
+				# needing to be destroyed and only do so if an
+				# older snapshot is found for this set.
+				POSSIBLY_DESTROY="$jj"
+			fi
+		fi
+	done
+}
+
+
 do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 {
 	local PROPS="$1"
@@ -147,12 +268,9 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 	local NAME="$3"
 	local GLOB="$4"
 	local TARGETS="$5"
-	local KEEP=''
 
-	# global DESTRUCTION_COUNT
 	# global SNAPSHOT_COUNT
 	# global WARNING_COUNT
-	# global SNAPSHOTS_OLD
 
 	for ii in $TARGETS
 	do
@@ -164,29 +282,13 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 			continue
 		fi 
 
-		# Retain at most $opt_keep number of old snapshots of this filesystem,
-		# including the one that was just recently created.
-		test -z "$opt_keep" && continue
-		KEEP="$opt_keep"
-
-		# ASSERT: The old snapshot list is sorted by increasing age.
-		for jj in $SNAPSHOTS_OLD
-		do
-			# Check whether this is an old snapshot of the filesystem.
-			if [ -z "${jj#$ii@$GLOB}" ]
-			then
-				KEEP=$(( $KEEP - 1 ))
-				if [ "$KEEP" -le '0' ]
-				then
-					if do_run "zfs destroy $FLAGS '$jj'" 
-					then
-						DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
-					else
-						WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
-					fi
-				fi
-			fi
-		done
+		if test -z "$opt_hanoi"
+		then
+			test -z "$opt_keep" && continue
+			do_rotate "$FLAGS" "$GLOB" "$ii"
+		else
+			do_hanoi  "$FLAGS" "$GLOB" "$ii"
+		fi
 	done
 }
 
@@ -196,9 +298,9 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 
 GETOPT=$(getopt \
   --longoptions=default-exclude,dry-run,fast,skip-scrub,recursive \
-  --longoptions=event:,keep:,label:,prefix:,sep: \
+  --longoptions=event:,hanoi:,keep:,label:,prefix:,sep: \
   --longoptions=debug,help,quiet,syslog,verbose \
-  --options=dnshe:l:k:p:rs:qgv \
+  --options=dnshH:e:l:k:p:rs:qgv \
   -- "$@" ) \
   || exit 128
 
@@ -243,6 +345,29 @@ do
 		(-h|--help)
 			print_usage
 			exit 0
+			;;
+		(-H|--hanoi)
+			HANOI_OPT="$2"
+			MULT="";
+			INT="";
+			case "$2" in
+				(*[0-9]s) MULT=1 ;;
+				(*[0-9]m) MULT=60 ;;
+				(*[0-9]h) MULT=3600 ;;
+				(*[0-9]d) MULT=86400 ;;
+				(*[0-9]w) MULT=604800 ;;
+				(*)
+					print_log error "Unrecognized interval $2 for the $1 parameter."
+					exit 139
+					;;
+			esac
+			INT=$(echo $2 | sed 's/.$//')
+			if ! test "$INT" -gt '0' 2>/dev/null
+			then
+				print_log error "The $2 parameter must be a positive integer."
+			fi
+			opt_hanoi=$(($INT * $MULT))
+			shift 2
 			;;
 		(-k|--keep)
 			if ! test "$2" -gt '0' 2>/dev/null
@@ -332,6 +457,11 @@ if [ "$#" -gt '1' -a "$SLASHIES" -gt '0' ]
 then
 	print_log error "The // must be the only argument if it is given."
 	exit 134
+fi
+
+if test -n "$opt_hanoi" -a -z "$opt_label"
+then
+	opt_label=hanoi
 fi
 
 # These are the only times that `zpool status` or `zfs list` are invoked, so
@@ -498,13 +628,18 @@ do
 	TARGETS_RECURSIVE="${TARGETS_RECURSIVE:+$TARGETS_RECURSIVE	}$ii" # nb: \t
 done
 
-# Linux lacks SMF and the notion of an FMRI event, but always set this property
-# because the SUNW program does. The dash character is the default.
-SNAPPROP="-o com.sun:auto-snapshot-desc='$opt_event'"
-
 # ISO style date; fifteen characters: YYYY-MM-DD-HHMM
 # On Solaris %H%M expands to 12h34.
 DATE=$(date --utc +%F-%H%M)
+
+if test -n "$opt_hanoi" -a "$opt_event" = "-"
+then
+	opt_event=hanoi-$HANOI_OPT-level-$(compute_hanoi_level $DATE)
+fi
+
+# Linux lacks SMF and the notion of an FMRI event, but always set this property
+# because the SUNW program does. The dash character is the default.
+SNAPPROP="-o com.sun:auto-snapshot-desc='$opt_event'"
 
 # The snapshot name after the @ symbol.
 SNAPNAME="$opt_prefix${opt_label:+$opt_sep$opt_label}-$DATE"
