@@ -38,6 +38,7 @@ opt_sep='_'
 opt_setauto=''
 opt_syslog=''
 opt_skip_scrub=''
+opt_utc=''
 opt_verbose=''
 
 # Global summary statistics.
@@ -62,6 +63,7 @@ print_usage ()
   -k, --keep=NUM     Keep NUM recent snapshots and destroy older snapshots.
   -l, --label=LAB    LAB is usually 'hourly', 'daily', or 'monthly'.
   -p, --prefix=PRE   PRE is 'zfs-auto-snap' by default.
+      --utc          Use UTC times in snapshot names.
   -q, --quiet        Suppress warnings and notices at the console.
       --send-full=F  Send zfs full backup. Unimplemented.
       --send-incr=F  Send zfs incremental backup. Unimplemented.
@@ -196,7 +198,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 
 GETOPT=$(getopt \
   --longoptions=default-exclude,dry-run,fast,skip-scrub,recursive \
-  --longoptions=event:,keep:,label:,prefix:,sep: \
+  --longoptions=event:,keep:,label:,prefix:,sep:,utc \
   --longoptions=debug,help,quiet,syslog,verbose \
   --options=dnshe:l:k:p:rs:qgv \
   -- "$@" ) \
@@ -271,6 +273,10 @@ do
 			done
 			opt_prefix="$2"
 			shift 2
+			;;
+		(--utc)
+			opt_utc='--utc'
+			shift 1
 			;;
 		(-q|--quiet)
 			opt_debug=''
@@ -504,7 +510,7 @@ SNAPPROP="-o com.sun:auto-snapshot-desc='$opt_event'"
 
 # ISO style date; fifteen characters: YYYY-MM-DD-HHMM
 # On Solaris %H%M expands to 12h34.
-DATE=$(date --utc +%F-%H%M)
+DATE=$(date $opt_utc +%F-%H%M)
 
 # The snapshot name after the @ symbol.
 SNAPNAME="$opt_prefix${opt_label:+$opt_sep$opt_label}-$DATE"
