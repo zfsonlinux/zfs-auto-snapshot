@@ -158,6 +158,10 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 
 	for ii in $TARGETS
 	do
+        if echo $SNAPSHOTS_OLD | grep -q "$ii@$NAME"
+        then
+            do_run "zfs destroy $FLAGS '$ii@$NAME'"
+        fi
 		if do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'" 
 		then
 			SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT + 1 ))
