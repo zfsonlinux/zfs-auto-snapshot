@@ -159,7 +159,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 	for ii in $TARGETS
 	do
 		do_run "$opt_pre_snapshot $ii $NAME"
-		if do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'" 
+		if [ $? -eq 0 ] && do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'"
 		then
 			do_run "$opt_post_snapshot $ii $NAME"
 			SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT + 1 ))
