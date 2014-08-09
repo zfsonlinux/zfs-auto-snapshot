@@ -64,14 +64,26 @@ Snapshot named filesystem and all descendants.
 \fB\-v\fR, \fB\-\-verbose\fR
 Print info messages.
 .TP
-\fB\-\-pre-snapshot\fR
-Command to run before snapshotting. It is passed the
-filesystem and snapshot name. If it returns non-zero,
-snapshotting this filesystem is aborted.
+\fB\-\-pre-snapshot\fR=\fICOMMAND\fR
+Command to run before each dataset is snapshotted. 
+It is passed the dataset and snapshot name. If it
+returns non-zero, snapshotting this dataset is 
+aborted.
 .TP
-\fB\-\-post-snapshot\fR
-Command to run after snapshotting. It is passed the
-filesystem and snapshot name.
+\fB\-\-post-snapshot\fR=\fICOMMAND\fR
+Command to run after each dataset is snapshotted. 
+It is passed the dataset and snapshot name.
+.TP
+\fB\-\-destroy-only\fR
+Do not create new snapshots, but do destroy older 
+snapshots. Has no effect unless used with \fB\-k\fR.
+.IP
+A non-obvious use may be constructon of cron jobs or
+scripts that run pre-snapshot command(s), then run 
+zfs-auto-snapshot (without \fB\-k\fR) to quickly
+snapshot all datasets, then run post-snapshot
+command(s) and clean up with zfs-auto-snapshot
+\fB\-\-destroy-only\fR.
 .TP
 name
 Filesystem and volume names, or '//' for all ZFS datasets.
