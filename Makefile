@@ -1,16 +1,18 @@
+PREFIX := /usr/local
+
 all:
 
 install:
-	install -d $(DESTDIR)$(PREFIX)/etc/cron.d
-	install -d $(DESTDIR)$(PREFIX)/etc/cron.daily
-	install -d $(DESTDIR)$(PREFIX)/etc/cron.hourly
-	install -d $(DESTDIR)$(PREFIX)/etc/cron.weekly
-	install -d $(DESTDIR)$(PREFIX)/etc/cron.monthly
-	install etc/zfs-auto-snapshot.cron.frequent $(DESTDIR)$(PREFIX)/etc/cron.d/zfs-auto-snapshot
-	install etc/zfs-auto-snapshot.cron.hourly   $(DESTDIR)$(PREFIX)/etc/cron.hourly/zfs-auto-snapshot
-	install etc/zfs-auto-snapshot.cron.daily    $(DESTDIR)$(PREFIX)/etc/cron.daily/zfs-auto-snapshot
-	install etc/zfs-auto-snapshot.cron.weekly   $(DESTDIR)$(PREFIX)/etc/cron.weekly/zfs-auto-snapshot
-	install etc/zfs-auto-snapshot.cron.monthly  $(DESTDIR)$(PREFIX)/etc/cron.monthly/zfs-auto-snapshot
+	install -d $(DESTDIR)/etc/cron.d
+	install -d $(DESTDIR)/etc/cron.daily
+	install -d $(DESTDIR)/etc/cron.hourly
+	install -d $(DESTDIR)/etc/cron.weekly
+	install -d $(DESTDIR)/etc/cron.monthly
+	install -m 0644 etc/zfs-auto-snapshot.cron.frequent $(DESTDIR)/etc/cron.d/zfs-auto-snapshot
+	install etc/zfs-auto-snapshot.cron.hourly   $(DESTDIR)/etc/cron.hourly/zfs-auto-snapshot
+	install etc/zfs-auto-snapshot.cron.daily    $(DESTDIR)/etc/cron.daily/zfs-auto-snapshot
+	install etc/zfs-auto-snapshot.cron.weekly   $(DESTDIR)/etc/cron.weekly/zfs-auto-snapshot
+	install etc/zfs-auto-snapshot.cron.monthly  $(DESTDIR)/etc/cron.monthly/zfs-auto-snapshot
 	install -d $(DESTDIR)$(PREFIX)/share/man/man8
 	install src/zfs-auto-snapshot.8 $(DESTDIR)$(PREFIX)/share/man/man8/zfs-auto-snapshot.8
 	install -d $(DESTDIR)$(PREFIX)/sbin

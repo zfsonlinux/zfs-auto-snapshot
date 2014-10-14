@@ -39,6 +39,9 @@ opt_setauto=''
 opt_syslog=''
 opt_skip_scrub=''
 opt_verbose=''
+opt_pre_snapshot=''
+opt_post_snapshot=''
+opt_do_snapshots=1
 
 # Global summary statistics.
 DESTRUCTION_COUNT='0'
@@ -69,6 +72,7 @@ print_usage ()
   -g, --syslog       Write messages into the system log.
   -r, --recursive    Snapshot named filesystem and all descendants.
   -v, --verbose      Print info messages.
+      --destroy-only Only destroy older snapshots, do not create new ones.
       name           Filesystem and volume names, or '//' for all ZFS datasets.
 " 
 }
@@ -148,6 +152,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 	local GLOB="$4"
 	local TARGETS="$5"
 	local KEEP=''
+	local RUNSNAP=1
 
 	# global DESTRUCTION_COUNT
 	# global SNAPSHOT_COUNT
@@ -156,13 +161,21 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 
 	for ii in $TARGETS
 	do
-		if do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'" 
+		if [ -n "$opt_do_snapshots" ]
 		then
-			SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT + 1 ))
-		else
-			WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
-			continue
-		fi 
+			if [ "$opt_pre_snapshot" != "" ]
+			then
+				do_run "$opt_pre_snapshot $ii $NAME" || RUNSNAP=0
+			fi
+			if [ $RUNSNAP -eq 1 ] && do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'"
+			then
+				[ "$opt_post_snapshot" != "" ] && do_run "$opt_post_snapshot $ii $NAME"
+				SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT + 1 ))
+			else
+				WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
+				continue
+			fi 
+		fi
 
 		# Retain at most $opt_keep number of old snapshots of this filesystem,
 		# including the one that was just recently created.
@@ -198,6 +211,7 @@ GETOPT=$(getopt \
   --longoptions=default-exclude,dry-run,fast,skip-scrub,recursive \
   --longoptions=event:,keep:,label:,prefix:,sep: \
   --longoptions=debug,help,quiet,syslog,verbose \
+  --longoptions=pre-snapshot:,post-snapshot:,destroy-only \
   --options=dnshe:l:k:p:rs:qgv \
   -- "$@" ) \
   || exit 128
@@ -306,6 +320,18 @@ do
 		(-v|--verbose)
 			opt_quiet=''
 			opt_verbose='1'
+			shift 1
+			;;
+		(--pre-snapshot)
+			opt_pre_snapshot="$2"
+			shift 2
+			;;
+		(--post-snapshot)
+			opt_post_snapshot="$2"
+			shift 2
+			;;
+		(--destroy-only)
+			opt_do_snapshots=''
 			shift 1
 			;;
 		(--)
@@ -507,16 +533,33 @@ SNAPPROP="-o com.sun:auto-snapshot-desc='$opt_event'"
 DATE=$(date --utc +%F-%H%M)
 
 # The snapshot name after the @ symbol.
-SNAPNAME="$opt_prefix${opt_label:+$opt_sep$opt_label-$DATE}"
+SNAPNAME="$opt_prefix${opt_label:+$opt_sep$opt_label}-$DATE"
 
 # The expression for matching old snapshots.  -YYYY-MM-DD-HHMM
 SNAPGLOB="$opt_prefix${opt_label:+?$opt_label}????????????????"
 
-test -n "$TARGETS_REGULAR" \
-  && print_log info "Doing regular snapshots of $TARGETS_REGULAR"
+if [ -n "$opt_do_snapshots" ]
+then
+	test -n "$TARGETS_REGULAR" \
+	  && print_log info "Doing regular snapshots of $TARGETS_REGULAR"
 
-test -n "$TARGETS_RECURSIVE" \
-  && print_log info "Doing recursive snapshots of $TARGETS_RECURSIVE"
+	test -n "$TARGETS_RECURSIVE" \
+	  && print_log info "Doing recursive snapshots of $TARGETS_RECURSIVE"
+
+	if test -n "$opt_keep" && [ "$opt_keep" -ge "1" ]
+	then
+		print_log info "Destroying all but the newest $opt_keep snapshots of each dataset."
+	fi
+elif test -n "$opt_keep" && [ "$opt_keep" -ge "1" ]
+then
+	test -n "$TARGETS_REGULAR" \
+	  && print_log info "Destroying all but the newest $opt_keep snapshots of $TARGETS_REGULAR"
+
+	test -n "$TARGETS_RECURSIVE" \
+	  && print_log info "Recursively destroying all but the newest $opt_keep snapshots of $TARGETS_RECURSIVE"
+else
+	print_log notice "Only destroying snapshots, but count of snapshots to preserve not given. Nothing to do."
+fi
 
 test -n "$opt_dry_run" \
   && print_log info "Doing a dry run. Not running these commands..."

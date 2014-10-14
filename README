@@ -10,3 +10,12 @@ snapshots if it is installed.
 
 This program is a posixly correct bourne shell script.  It depends only on
 the zfs utilities and cron, and can run in the dash shell.
+
+
+Installation:
+-------------
+
+wget https://github.com/zfsonlinux/zfs-auto-snapshot/archive/master.zip
+unzip master.zip
+cd zfs-auto-snapshot-master
+make install
