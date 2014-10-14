@@ -64,6 +64,15 @@ Snapshot named filesystem and all descendants.
 \fB\-v\fR, \fB\-\-verbose\fR
 Print info messages.
 .TP
+\fB\-\-pre-snapshot\fR
+Command to run before snapshotting. It is passed the
+filesystem and snapshot name. If it returns non-zero,
+snapshotting this filesystem is aborted.
+.TP
+\fB\-\-post-snapshot\fR
+Command to run after snapshotting. It is passed the
+filesystem and snapshot name.
+.TP
 name
 Filesystem and volume names, or '//' for all ZFS datasets.
 .SH SEE ALSO

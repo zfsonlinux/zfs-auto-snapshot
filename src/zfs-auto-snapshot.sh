@@ -39,6 +39,8 @@ opt_setauto=''
 opt_syslog=''
 opt_skip_scrub=''
 opt_verbose=''
+opt_pre_snapshot=''
+opt_post_snapshot=''
 
 # Global summary statistics.
 DESTRUCTION_COUNT='0'
@@ -156,8 +158,10 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 
 	for ii in $TARGETS
 	do
-		if do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'" 
+		do_run "$opt_pre_snapshot $ii $NAME"
+		if [ $? -eq 0 ] && do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'"
 		then
+			do_run "$opt_post_snapshot $ii $NAME"
 			SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT + 1 ))
 		else
 			WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
@@ -198,6 +202,7 @@ GETOPT=$(getopt \
   --longoptions=default-exclude,dry-run,fast,skip-scrub,recursive \
   --longoptions=event:,keep:,label:,prefix:,sep: \
   --longoptions=debug,help,quiet,syslog,verbose \
+  --longoptions=pre-snapshot:,post-snapshot: \
   --options=dnshe:l:k:p:rs:qgv \
   -- "$@" ) \
   || exit 128
@@ -307,6 +312,14 @@ do
 			opt_quiet=''
 			opt_verbose='1'
 			shift 1
+			;;
+		(--pre-snapshot)
+			opt_pre_snapshot="$2"
+			shift 2
+			;;
+		(--post-snapshot)
+			opt_post_snapshot="$2"
+			shift 2
 			;;
 		(--)
 			shift 1
