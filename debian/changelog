@@ -1,3 +1,29 @@
+zfs-auto-snapshot (1.2.1-1) unstable; urgency=low
+
+  [ Roland Stühmer ]
+  * Fix SNAPNAME to contain the DATE if label is empty
+
+  [ Borut Mrak ]
+  * Remove PREFIX from cron scripts - they should always end up in /etc.
+  * Leave PREFIX for man page and program, and set it to /usr/local by default.
+
+  [ Maciej Małecki ]
+  * Add `--{pre,post}-snapshot` for pre and post creation hook
+  * Abort if pre snapshot hook returns non-zero
+  * Document `--{pre,post}-snapshot
+
+  [ Mike Baynton ]
+  * Make --{pre,post}-snapshot optional, add --destroy-only, revise docs
+
+  [ virtualguy ]
+  * Update README
+
+  [ Darik Horn ]
+  * Install the cron.d part without the execute bit.
+  * Update debian/rules for Makefile changes.
+
+ -- Darik Horn <dajhorn@vanadac.com>  Tue, 14 Oct 2014 00:18:08 -0500
+
 zfs-auto-snapshot (1.1.0-0ubuntu1) unstable; urgency=low
 
   [ Markus Heberling ]
