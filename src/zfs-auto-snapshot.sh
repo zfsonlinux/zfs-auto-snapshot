@@ -191,7 +191,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 				KEEP=$(( $KEEP - 1 ))
 				if [ "$KEEP" -le '0' ]
 				then
-					if do_run "zfs destroy $FLAGS '$jj'" 
+					if do_run "zfs destroy -d $FLAGS '$jj'" 
 					then
 						DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
 					else
