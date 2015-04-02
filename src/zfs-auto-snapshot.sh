@@ -34,6 +34,11 @@ opt_keep=''
 opt_label=''
 opt_prefix='zfs-auto-snap'
 opt_recursive=''
+opt_send_type=''
+opt_send_host=''
+opt_recv_pool=''
+opt_send_opts=''
+opt_recv_opts=''
 opt_sep='_'
 opt_setauto=''
 opt_syslog=''
@@ -50,6 +55,7 @@ WARNING_COUNT='0'
 
 # Other global variables.
 SNAPSHOTS_OLD=''
+SNAPS_DONE=''
 
 
 print_usage ()
@@ -66,8 +72,10 @@ print_usage ()
   -l, --label=LAB    LAB is usually 'hourly', 'daily', or 'monthly'.
   -p, --prefix=PRE   PRE is 'zfs-auto-snap' by default.
   -q, --quiet        Suppress warnings and notices at the console.
-      --send-full=F  Send zfs full backup. Unimplemented.
-      --send-incr=F  Send zfs incremental backup. Unimplemented.
+      --send-full=F  Send zfs full backup.
+      --send-incr=F  Send zfs incremental backup.
+      --send-opts=F  Option(s) passed to 'zfs send'.
+      --recv-opts=F  Option(s) passed to 'zfs receive'.
       --sep=CHAR     Use CHAR to separate date stamps in snapshot names.
   -g, --syslog       Write messages into the system log.
   -r, --recursive    Snapshot named filesystem and all descendants.
@@ -144,6 +152,64 @@ do_run () # [argv]
 }
 
 
+find_last_snap () # dset, GLOB
+{
+	local snap="$1"
+	local GLOB="$2"
+
+	local dset="${snap%@*}"
+	local last_snap
+	local jj
+
+	# STEP 1: Go through ALL snapshots that exist, look for exact
+	#         match on dataset/volume (with snapshot matching 'GLOB').
+	for jj in $SNAPSHOTS_OLD
+	do
+		# Check whether this is an old snapshot of the filesystem.
+		if [ -z "${jj#$dset@$GLOB}" ]; then
+			# We want the FIRST one (which is the last in time
+			# before the one we just created in do_snapshot()).
+			# Also, here we just need the snapshot name.
+			last_snap="${jj#*@}"
+			break
+		fi
+	done
+
+	# NOTE: If we don't have any previous snapshots (for example, we've
+	#       just created the first one) we can end up with last_snap=''
+	#       here.
+	#       If we're called with '--send-incr' we have to options:
+	#         1: We change from incremental to full.
+	#         2: We accept that the user have said INCR, and stick with
+	#            it.
+	if [ "$opt_send_type" = "incr" -a -z "$last_snap" ]; then
+		if [ -n "$opt_verbose" ]; then
+			echo > /dev/stderr "WARNING: No previous snapshots exist but we where called"
+			echo > /dev/stderr "         with --send-incr. Can not continue."
+			echo > /dev/stderr "         Please rerun with --send-full."
+		fi
+		return 1
+	fi
+
+	if [ -n "$opt_recursive" -a -n "$last_snap" ]; then
+		# STEP 2: Again, go through ALL snapshots that exists, but this
+		#         time only look for the snapshots that 'starts with'
+		#         the dataset/volume in question AND 'ends with'
+		#         the exact snapshot name/date in step 2.
+		for jj in $SNAPSHOTS_OLD
+		do
+			if echo "$jj" | grep -qE "^$dset.*@$last_snap"; then
+				echo $jj
+			fi
+		done
+	else
+		echo "$snap"
+	fi
+
+	return 0
+}
+
+
 do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 {
 	local PROPS="$1"
@@ -170,6 +236,8 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 			if [ $RUNSNAP -eq 1 ] && do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'"
 			then
 				[ "$opt_post_snapshot" != "" ] && do_run "$opt_post_snapshot $ii $NAME"
+				[ -n "$opt_send_host" ] && SNAPS_DONE="$SNAPS_DONE
+$ii@$NAME"
 				SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT + 1 ))
 			else
 				WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
@@ -203,6 +271,34 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 	done
 }
 
+do_send () # snapname, oldglob
+{
+	local NAME="$1"
+	local GLOB="$2"
+	local remote="ssh $opt_send_host zfs receive $opt_recv_opts $opt_recv_pool"
+	local ii
+	local jj
+
+	# STEP 1: Go throug all snapshots we've created
+	for ii in $SNAPS_DONE
+	do
+		opts=''
+		SNAPS_SEND=''
+
+		# STEP 2: Find the last snapshot
+		SNAPS_SEND=$(find_last_snap "$ii" "$GLOB")
+
+		# STEP 3: Go through all snapshots that is to be transfered and send them.
+		for jj in $SNAPS_SEND
+		do
+			if [ "$opt_send_type" = "incr" ]; then
+				do_run "zfs send $opt_send_opts -i $jj $ii | $remote"
+			else
+				do_run "zfs send $opt_send_opts -R $jj | $remote"
+			fi
+		done
+	done
+}
 
 # main ()
 # {
@@ -212,6 +308,7 @@ GETOPT=$(getopt \
   --longoptions=event:,keep:,label:,prefix:,sep: \
   --longoptions=debug,help,quiet,syslog,verbose \
   --longoptions=pre-snapshot:,post-snapshot:,destroy-only \
+  --longoptions=send-full:,send-incr:,send-opts:,recv-opts: \
   --options=dnshe:l:k:p:rs:qgv \
   -- "$@" ) \
   || exit 128
@@ -295,6 +392,30 @@ do
 		(-r|--recursive)
 			opt_recursive='1'
 			shift 1
+			;;
+		(--send-full)
+			opt_send_type='full'
+
+			opt_send_host=$(echo "$2" | sed 's,:.*,,')
+			opt_recv_pool=$(echo "$2" | sed 's,.*:,,')
+
+			opt_send_opts="$opt_send_opts -R"
+			shift 2
+			;;
+		(--send-incr)
+			opt_send_type='incr'
+
+			opt_send_host=$(echo "$2" | sed 's,:.*,,')
+			opt_recv_pool=$(echo "$2" | sed 's,.*:,,')
+			shift 2
+			;;
+		(--send-opts)
+			opt_send_opts="$2"
+			shift 2
+			;;
+		(--recv-opts)
+			opt_recv_opts="$2"
+			shift 2
 			;;
 		(--sep)
 			case "$2" in 
@@ -566,6 +687,8 @@ test -n "$opt_dry_run" \
 
 do_snapshots "$SNAPPROP" ""   "$SNAPNAME" "$SNAPGLOB" "$TARGETS_REGULAR"
 do_snapshots "$SNAPPROP" "-r" "$SNAPNAME" "$SNAPGLOB" "$TARGETS_RECURSIVE"
+
+do_send "$SNAPNAME" "$SNAPGLOB"
 
 print_log notice "@$SNAPNAME," \
   "$SNAPSHOT_COUNT created," \

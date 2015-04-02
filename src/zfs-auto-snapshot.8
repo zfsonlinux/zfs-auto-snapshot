@@ -46,11 +46,17 @@ PRE is 'zfs\-auto\-snap' by default.
 \fB\-q\fR, \fB\-\-quiet\fR
 Suppress warnings and notices at the console.
 .TP
-\fB\-\-send\-full\fR=\fIF\fR
-Send zfs full backup. Unimplemented.
+\fB\-\-send\-full\fR=[\fIremote host\fR]:[\fIremote pool\fR]
+Send zfs full backup to remote hostname (or IP address) and put it in  remote pool.
 .TP
-\fB\-\-send\-incr\fR=\fIF\fR
-Send zfs incremental backup. Unimplemented.
+\fB\-\-send\-incr\fR=[\fIremote host\fR]:[\fIremote pool\fR]
+Send zfs incremental backup to remote hostname (or IP address) and put it in remote pool.
+.TP
+\fB\-\-send\-opts\fR=\fIOPTS\fR
+Option(s) passed to 'zfs send'.
+.TP
+\fB\-\-recv\-opts\fR=\fIOPTS\fR
+Option(s) passed to 'zfs receive'.
 .TP
 \fB\-\-sep\fR=\fICHAR\fR
 Use CHAR to separate date stamps in snapshot names.
