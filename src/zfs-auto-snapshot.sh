@@ -38,6 +38,7 @@ opt_send_type=''
 opt_send_host=''
 opt_recv_pool=''
 opt_send_opts=''
+opt_send_only=''
 opt_recv_opts=''
 opt_send_ssh_opts=''
 opt_send_mbuf_opts=''
@@ -85,6 +86,7 @@ print_usage ()
       --send-ssh-opts   Option(s) passed to 'ssh'.
       --send-mbuf-opts  Use mbuffer (with these options) between 'zfs send'
                         and 'ssh <host> zfs receive'.
+      --send-only       Only send the the most recent snapshot
       --sep=CHAR        Use CHAR to separate date stamps in snapshot names.
   -g, --syslog          Write messages into the system log.
   -r, --recursive       Snapshot named filesystem and all descendants.
@@ -265,29 +267,35 @@ $ii@$NAME"
 			fi 
 		fi
 
+		[ -n "$opt_send_only" ] && tmp=$(find_last_snap "$ii@$NAME" "$GLOB")
+		[ -n "$tmp" ] && SNAPS_DONE="$SNAPS_DONE
+$tmp"
+
 		# Retain at most $opt_keep number of old snapshots of this filesystem,
 		# including the one that was just recently created.
 		test -z "$opt_keep" && continue
 		KEEP="$opt_keep"
 
-		# ASSERT: The old snapshot list is sorted by increasing age.
-		for jj in $SNAPSHOTS_OLD
-		do
-			# Check whether this is an old snapshot of the filesystem.
-			if [ -z "${jj#$ii@$GLOB}" ]
-			then
-				KEEP=$(( $KEEP - 1 ))
-				if [ "$KEEP" -le '0' ]
+		if [ -z "$opt_send_only" ]; then
+			# ASSERT: The old snapshot list is sorted by increasing age.
+			for jj in $SNAPSHOTS_OLD
+			do
+				# Check whether this is an old snapshot of the filesystem.
+				if [ -z "${jj#$ii@$GLOB}" ]
 				then
-					if do_run "zfs destroy $FLAGS '$jj'" 
+					KEEP=$(( $KEEP - 1 ))
+					if [ "$KEEP" -le '0' ]
 					then
-						DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
-					else
-						WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
+						if do_run "zfs destroy $FLAGS '$jj'" 
+						then
+							DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
+						else
+							WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
+						fi
 					fi
 				fi
-			fi
-		done
+			done
+		fi
 	done
 }
 
@@ -351,7 +359,7 @@ GETOPT=$(getopt \
   --longoptions=pre-snapshot:,post-snapshot:,destroy-only \
   --longoptions=send-full:,send-incr:,send-opts:,recv-opts: \
   --longoptions=send-ssh-opts:,send-mbuf-opts:,pre-send:,post-send: \
-  --longoptions=send-fallback \
+  --longoptions=send-fallback,send-only \
   --options=dnshe:l:k:p:rs:qgv \
   -- "$@" ) \
   || exit 128
@@ -454,6 +462,11 @@ do
 			;;
 		(--send-fallback)
 			opt_send_fallback=1
+			shift 1
+			;;
+		(--send-only)
+			opt_send_only=1
+			opt_do_snapshots=''
 			shift 1
 			;;
 		(--send-opts)
