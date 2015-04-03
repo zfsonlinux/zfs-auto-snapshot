@@ -35,8 +35,7 @@ opt_label=''
 opt_prefix='zfs-auto-snap'
 opt_recursive=''
 opt_send_type=''
-opt_send_host=''
-opt_recv_pool=''
+opt_send=''
 opt_send_opts=''
 opt_send_only=''
 opt_recv_opts=''
@@ -258,7 +257,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 			if [ $RUNSNAP -eq 1 ] && do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'"
 			then
 				[ "$opt_post_snapshot" != "" ] && do_run "$opt_post_snapshot $ii $NAME"
-				[ -n "$opt_send_host" ] && SNAPS_DONE="$SNAPS_DONE
+				[ -n "$opt_send" ] && SNAPS_DONE="$SNAPS_DONE
 $ii@$NAME"
 				SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT + 1 ))
 			else
@@ -304,13 +303,13 @@ do_send () # snapname, oldglob
 	local NAME="$1"
 	local GLOB="$2"
 	local RUNSEND=1
-	local remote
+	local remote_ssh="ssh $opt_send_ssh_opts"
+	local remote_recv="zfs receive $opt_recv_opts"
+	local remote_mbuf=""
 	local ii
 	local jj
 
-	[ -n "$opt_send_mbuf_opts" ] && remote="mbuffer $opt_send_mbuf_opts |"
-	remote="$remote ssh $opt_send_ssh_opts $opt_send_host"
-	remote="$remote zfs receive $opt_recv_opts"
+	[ -n "$opt_send_mbuf_opts" ] && remote_mbuf="mbuffer $opt_send_mbuf_opts |"
 
 	# STEP 1: Go throug all snapshots we've created
 	for ii in $SNAPS_DONE
@@ -329,17 +328,30 @@ do_send () # snapname, oldglob
 			fi
 
 			if [ $RUNSEND -eq 1 ]; then
-				if [ "$opt_send_type" = "incr" ]; then
-					if [ "$jj" = "$ii" -a -n "$opt_send_fallback" ]; then
-						do_run "zfs send $opt_send_opts -R $ii | $remote -F $opt_recv_pool" \
-							|| RUNSEND=0
+				# Go through each option to --send-{incr,full}.
+				# rem=<remote_host>:<remote_pool>
+				for rem in $opt_send; do
+					if [ "$opt_send_type" = "incr" ]; then
+						if [ "$jj" = "$ii" -a -n "$opt_send_fallback" ]; then
+							cmd="zfs send $opt_send_opts -R $ii |"
+							cmd="$cmd $remote_mbuf"
+							cmd="$cmd $remote_ssh ${rem%:*}"
+							cmd="$cmd $remote_recv -F ${rem#*:}"
+						else
+							cmd="zfs send $opt_send_opts -i $jj $ii |"
+							cmd="$cmd $remote_mbuf"
+							cmd="$cmd $remote_ssh ${rem%:*}"
+							cmd="$cmd $remote_recv ${rem#*:}"
+						fi
 					else
-						do_run "zfs send $opt_send_opts -i $jj $ii | $remote $opt_recv_pool" \
-							|| RUNSEND=0
+						cmd="zfs send $opt_send_opts -R $jj |"
+						cmd="$cmd $remote_mbuf"
+						cmd="$cmd $remote_ssh ${rem%:*}"
+						cmd="$cmd $remote_recv ${rem#*:}"
 					fi
-				else
-					do_run "zfs send $opt_send_opts -R $jj | $remote $opt_recv_pool" || RUNSEND=0
-				fi
+
+					do_run "$cmd" || RUNSEND=0
+				done
 
 				if [ $RUNSEND = 1 -a -n "$opt_post_send" ]; then
 					do_run "$opt_post_send $jj" || RUNSEND=0
@@ -446,18 +458,15 @@ do
 			;;
 		(--send-full)
 			opt_send_type='full'
-
-			opt_send_host=$(echo "$2" | sed 's,:.*,,')
-			opt_recv_pool=$(echo "$2" | sed 's,.*:,,')
-
 			opt_send_opts="$opt_send_opts -R"
+			opt_send=$(echo "$2" | sed 's,;,\
+,g')
 			shift 2
 			;;
 		(--send-incr)
 			opt_send_type='incr'
-
-			opt_send_host=$(echo "$2" | sed 's,:.*,,')
-			opt_recv_pool=$(echo "$2" | sed 's,.*:,,')
+			opt_send=$(echo "$2" | sed 's,;,\
+,g')
 			shift 2
 			;;
 		(--send-fallback)
