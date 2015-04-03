@@ -41,6 +41,7 @@ opt_send_opts=''
 opt_recv_opts=''
 opt_send_ssh_opts=''
 opt_send_mbuf_opts=''
+opt_send_fallback=''
 opt_sep='_'
 opt_setauto=''
 opt_syslog=''
@@ -78,6 +79,7 @@ print_usage ()
   -q, --quiet           Suppress warnings and notices at the console.
       --send-full=F     Send zfs full backup.
       --send-incr=F     Send zfs incremental backup.
+      --send-fallback   Fallback from incremental to full if needed.
       --send-opts=F     Option(s) passed to 'zfs send'.
       --recv-opts=F     Option(s) passed to 'zfs receive'.
       --send-ssh-opts   Option(s) passed to 'ssh'.
@@ -189,22 +191,33 @@ find_last_snap () # dset, GLOB
 	#         1: We change from incremental to full.
 	#         2: We accept that the user have said INCR, and stick with
 	#            it.
-	if [ "$opt_send_type" = "incr" -a -z "$last_snap" ]; then
+	#       Normally we do point 2, but if --send-fallback is specified,
+	#       we allow it and convert to a full send instead.
+	if [ "$opt_send_type" = "incr" -a -z "$last_snap" -a -z "$opt_send_fallback" ]; then
 		if [ -n "$opt_verbose" ]; then
 			echo > /dev/stderr "WARNING: No previous snapshots exist but we where called"
 			echo > /dev/stderr "         with --send-incr. Can not continue."
 			echo > /dev/stderr "         Please rerun with --send-full."
+			echo > /dev/stderr "         Or use --send-fallback."
 		fi
 		return 1
 	fi
 
-	if [ -n "$opt_recursive" -a -n "$last_snap" ]; then
+	if [ -n "$opt_recursive" ]; then
 		# STEP 2: Again, go through ALL snapshots that exists, but this
 		#         time only look for the snapshots that 'starts with'
 		#         the dataset/volume in question AND 'ends with'
 		#         the exact snapshot name/date in step 2.
 		for jj in $SNAPSHOTS_OLD
 		do
+			# When trying to find snapshots recurively, we MUST have a 'last_snap'
+			# value. Othervise, it will match ALL snapshots for dset (if we had
+			# used '"^$dset.*@$GLOB" only).
+			if [ -z "$last_snap" ] && echo "$jj" | grep -qE "^$dset.*@$GLOB"; then
+				# Use this as last snapshot name
+				last_snap="${jj#*@}"
+			fi
+
 			if echo "$jj" | grep -qE "^$dset.*@$last_snap"; then
 				echo $jj
 			fi
@@ -288,8 +301,8 @@ do_send () # snapname, oldglob
 	local jj
 
 	[ -n "$opt_send_mbuf_opts" ] && remote="mbuffer $opt_send_mbuf_opts |"
-	remote="$remote ssh $opt_send_ssh_opts $opt_send_host "
-	remote="$remote zfs receive $opt_recv_opts $opt_recv_pool"
+	remote="$remote ssh $opt_send_ssh_opts $opt_send_host"
+	remote="$remote zfs receive $opt_recv_opts"
 
 	# STEP 1: Go throug all snapshots we've created
 	for ii in $SNAPS_DONE
@@ -309,9 +322,15 @@ do_send () # snapname, oldglob
 
 			if [ $RUNSEND -eq 1 ]; then
 				if [ "$opt_send_type" = "incr" ]; then
-					do_run "zfs send $opt_send_opts -i $jj $ii | $remote" || RUNSEND=0
+					if [ "$jj" = "$ii" -a -n "$opt_send_fallback" ]; then
+						do_run "zfs send $opt_send_opts -R $ii | $remote -F $opt_recv_pool" \
+							|| RUNSEND=0
+					else
+						do_run "zfs send $opt_send_opts -i $jj $ii | $remote $opt_recv_pool" \
+							|| RUNSEND=0
+					fi
 				else
-					do_run "zfs send $opt_send_opts -R $jj | $remote" || RUNSEND=0
+					do_run "zfs send $opt_send_opts -R $jj | $remote $opt_recv_pool" || RUNSEND=0
 				fi
 
 				if [ $RUNSEND = 1 -a -n "$opt_post_send" ]; then
@@ -332,6 +351,7 @@ GETOPT=$(getopt \
   --longoptions=pre-snapshot:,post-snapshot:,destroy-only \
   --longoptions=send-full:,send-incr:,send-opts:,recv-opts: \
   --longoptions=send-ssh-opts:,send-mbuf-opts:,pre-send:,post-send: \
+  --longoptions=send-fallback \
   --options=dnshe:l:k:p:rs:qgv \
   -- "$@" ) \
   || exit 128
@@ -431,6 +451,10 @@ do
 			opt_send_host=$(echo "$2" | sed 's,:.*,,')
 			opt_recv_pool=$(echo "$2" | sed 's,.*:,,')
 			shift 2
+			;;
+		(--send-fallback)
+			opt_send_fallback=1
+			shift 1
 			;;
 		(--send-opts)
 			opt_send_opts="$2"

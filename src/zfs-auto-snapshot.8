@@ -52,6 +52,11 @@ Send zfs full backup to remote hostname (or IP address) and put it in  remote po
 \fB\-\-send\-incr\fR=[\fIremote host\fR]:[\fIremote pool\fR]
 Send zfs incremental backup to remote hostname (or IP address) and put it in remote pool.
 .TP
+\fB\-\-send\-fallback\fR
+Allow to fallback from incremental to full snapshot replication.
+.sp
+This implies \fI-R\fR to \fBzfs send\fR and \fI-F\fR to \fBzfs receive\fR.
+.TP
 \fB\-\-send\-opts\fR=\fIOPTS\fR
 Option(s) passed to 'zfs send'.
 .TP
