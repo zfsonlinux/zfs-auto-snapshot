@@ -533,10 +533,10 @@ SNAPPROP="-o com.sun:auto-snapshot-desc='$opt_event'"
 DATE=$(date --utc +%F-%H%M)
 
 # The snapshot name after the @ symbol.
-SNAPNAME="$opt_prefix${opt_label:+$opt_sep$opt_label}-$DATE"
+SNAPNAME="${opt_prefix:+$opt_prefix$opt_sep}${opt_label:+$opt_label}-$DATE"
 
 # The expression for matching old snapshots.  -YYYY-MM-DD-HHMM
-SNAPGLOB="$opt_prefix${opt_label:+?$opt_label}????????????????"
+SNAPGLOB="${opt_prefix:+$opt_prefix$opt_sep}${opt_label:+$opt_label}-???????????????"
 
 if [ -n "$opt_do_snapshots" ]
 then
