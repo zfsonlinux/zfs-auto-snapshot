@@ -46,6 +46,8 @@ opt_skip_scrub=''
 opt_verbose=''
 opt_pre_snapshot=''
 opt_post_snapshot=''
+opt_pre_send=''
+opt_post_send=''
 opt_do_snapshots=1
 
 # Global summary statistics.
@@ -275,6 +277,7 @@ do_send () # snapname, oldglob
 {
 	local NAME="$1"
 	local GLOB="$2"
+	local RUNSEND=1
 	local remote="ssh $opt_send_host zfs receive $opt_recv_opts $opt_recv_pool"
 	local ii
 	local jj
@@ -291,10 +294,20 @@ do_send () # snapname, oldglob
 		# STEP 3: Go through all snapshots that is to be transfered and send them.
 		for jj in $SNAPS_SEND
 		do
-			if [ "$opt_send_type" = "incr" ]; then
-				do_run "zfs send $opt_send_opts -i $jj $ii | $remote"
-			else
-				do_run "zfs send $opt_send_opts -R $jj | $remote"
+			if [ -n "$opt_pre_send" ]; then
+				do_run "$opt_pre_send $jj" || RUNSEND=0
+			fi
+
+			if [ $RUNSEND -eq 1 ]; then
+				if [ "$opt_send_type" = "incr" ]; then
+					do_run "zfs send $opt_send_opts -i $jj $ii | $remote" || RUNSEND=0
+				else
+					do_run "zfs send $opt_send_opts -R $jj | $remote" || RUNSEND=0
+				fi
+
+				if [ $RUNSEND = 1 -a -n "$opt_post_send" ]; then
+					do_run "$opt_post_send $jj" || RUNSEND=0
+				fi
 			fi
 		done
 	done
@@ -309,6 +322,7 @@ GETOPT=$(getopt \
   --longoptions=debug,help,quiet,syslog,verbose \
   --longoptions=pre-snapshot:,post-snapshot:,destroy-only \
   --longoptions=send-full:,send-incr:,send-opts:,recv-opts: \
+  --longoptions=pre-send:,post-send: \
   --options=dnshe:l:k:p:rs:qgv \
   -- "$@" ) \
   || exit 128
@@ -449,6 +463,14 @@ do
 			;;
 		(--post-snapshot)
 			opt_post_snapshot="$2"
+			shift 2
+			;;
+		(--pre-send)
+			opt_pre_send="$2"
+			shift 2
+			;;
+		(--post-send)
+			opt_post_send="$2"
 			shift 2
 			;;
 		(--destroy-only)

@@ -80,6 +80,16 @@ aborted.
 Command to run after each dataset is snapshotted. 
 It is passed the dataset and snapshot name.
 .TP
+\fB\-\-pre-send\fR=\fICOMMAND\fR
+Command to run before each snapshot is sent to
+remote host. It is passed the snapshot name. If
+it returns non-zero, sending this dataset is
+aborted.
+.TP
+\fB\-\-post-send\fR=\fICOMMAND\fR
+Command to run after each snapshot have been sent.
+It is passed the snapshot name.
+.TP
 \fB\-\-destroy-only\fR
 Do not create new snapshots, but do destroy older 
 snapshots. Has no effect unless used with \fB\-k\fR.
