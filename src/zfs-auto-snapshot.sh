@@ -39,6 +39,8 @@ opt_send_host=''
 opt_recv_pool=''
 opt_send_opts=''
 opt_recv_opts=''
+opt_send_ssh_opts=''
+opt_send_mbuf_opts=''
 opt_sep='_'
 opt_setauto=''
 opt_syslog=''
@@ -63,27 +65,30 @@ SNAPS_DONE=''
 print_usage ()
 {
 	echo "Usage: $0 [options] [-l label] <'//' | name [name...]>
-  --default-exclude  Exclude datasets if com.sun:auto-snapshot is unset.
-  -d, --debug        Print debugging messages.
-  -e, --event=EVENT  Set the com.sun:auto-snapshot-desc property to EVENT.
-      --fast         Use a faster zfs list invocation.
-  -n, --dry-run      Print actions without actually doing anything.
-  -s, --skip-scrub   Do not snapshot filesystems in scrubbing pools.
-  -h, --help         Print this usage message.
-  -k, --keep=NUM     Keep NUM recent snapshots and destroy older snapshots.
-  -l, --label=LAB    LAB is usually 'hourly', 'daily', or 'monthly'.
-  -p, --prefix=PRE   PRE is 'zfs-auto-snap' by default.
-  -q, --quiet        Suppress warnings and notices at the console.
-      --send-full=F  Send zfs full backup.
-      --send-incr=F  Send zfs incremental backup.
-      --send-opts=F  Option(s) passed to 'zfs send'.
-      --recv-opts=F  Option(s) passed to 'zfs receive'.
-      --sep=CHAR     Use CHAR to separate date stamps in snapshot names.
-  -g, --syslog       Write messages into the system log.
-  -r, --recursive    Snapshot named filesystem and all descendants.
-  -v, --verbose      Print info messages.
-      --destroy-only Only destroy older snapshots, do not create new ones.
-      name           Filesystem and volume names, or '//' for all ZFS datasets.
+  --default-exclude     Exclude datasets if com.sun:auto-snapshot is unset.
+  -d, --debug           Print debugging messages.
+  -e, --event=EVENT     Set the com.sun:auto-snapshot-desc property to EVENT.
+      --fast            Use a faster zfs list invocation.
+  -n, --dry-run         Print actions without actually doing anything.
+  -s, --skip-scrub      Do not snapshot filesystems in scrubbing pools.
+  -h, --help            Print this usage message.
+  -k, --keep=NUM        Keep NUM recent snapshots and destroy older snapshots.
+  -l, --label=LAB       LAB is usually 'hourly', 'daily', or 'monthly'.
+  -p, --prefix=PRE      PRE is 'zfs-auto-snap' by default.
+  -q, --quiet           Suppress warnings and notices at the console.
+      --send-full=F     Send zfs full backup.
+      --send-incr=F     Send zfs incremental backup.
+      --send-opts=F     Option(s) passed to 'zfs send'.
+      --recv-opts=F     Option(s) passed to 'zfs receive'.
+      --send-ssh-opts   Option(s) passed to 'ssh'.
+      --send-mbuf-opts  Use mbuffer (with these options) between 'zfs send'
+                        and 'ssh <host> zfs receive'.
+      --sep=CHAR        Use CHAR to separate date stamps in snapshot names.
+  -g, --syslog          Write messages into the system log.
+  -r, --recursive       Snapshot named filesystem and all descendants.
+  -v, --verbose         Print info messages.
+      --destroy-only    Only destroy older snapshots, do not create new ones.
+      name              Filesystem and volume names, or '//' for all ZFS datasets.
 " 
 }
 
@@ -278,9 +283,13 @@ do_send () # snapname, oldglob
 	local NAME="$1"
 	local GLOB="$2"
 	local RUNSEND=1
-	local remote="ssh $opt_send_host zfs receive $opt_recv_opts $opt_recv_pool"
+	local remote
 	local ii
 	local jj
+
+	[ -n "$opt_send_mbuf_opts" ] && remote="mbuffer $opt_send_mbuf_opts |"
+	remote="$remote ssh $opt_send_ssh_opts $opt_send_host "
+	remote="$remote zfs receive $opt_recv_opts $opt_recv_pool"
 
 	# STEP 1: Go throug all snapshots we've created
 	for ii in $SNAPS_DONE
@@ -322,7 +331,7 @@ GETOPT=$(getopt \
   --longoptions=debug,help,quiet,syslog,verbose \
   --longoptions=pre-snapshot:,post-snapshot:,destroy-only \
   --longoptions=send-full:,send-incr:,send-opts:,recv-opts: \
-  --longoptions=pre-send:,post-send: \
+  --longoptions=send-ssh-opts:,send-mbuf-opts:,pre-send:,post-send: \
   --options=dnshe:l:k:p:rs:qgv \
   -- "$@" ) \
   || exit 128
@@ -429,6 +438,14 @@ do
 			;;
 		(--recv-opts)
 			opt_recv_opts="$2"
+			shift 2
+			;;
+		(--send-ssh-opts)
+			opt_send_ssh_opts="$2"
+			shift 2
+			;;
+		(--send-mbuf-opts)
+			opt_send_mbuf_opts="$2"
 			shift 2
 			;;
 		(--sep)

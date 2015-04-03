@@ -58,6 +58,17 @@ Option(s) passed to 'zfs send'.
 \fB\-\-recv\-opts\fR=\fIOPTS\fR
 Option(s) passed to 'zfs receive'.
 .TP
+\fB\-\-send\-ssh\-opts\fR=\fIOPTS\fR
+Option(s) passed to 'ssh' in the replication command line.
+.sp
+See \fBssh\fR(1) for availible options.
+.TP
+\fB\-\-send\-mbuf\-opts\fR=\fIOPTS\fR
+Use \fBmbuffer\fR (with these options) between 'zfs send' and
+\'ssh <host> zfs receive <pool>'.
+.sp
+See \fBmbuffer\fR(1) for availible options.
+.TP
 \fB\-\-sep\fR=\fICHAR\fR
 Use CHAR to separate date stamps in snapshot names.
 .TP
