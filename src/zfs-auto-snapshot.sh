@@ -61,6 +61,7 @@ WARNING_COUNT='0'
 # Other global variables.
 SNAPSHOTS_OLD=''
 SNAPS_DONE=''
+SNAPS_DESTROY=''
 
 
 print_usage ()
@@ -288,6 +289,8 @@ $tmp"
 						if do_run "zfs destroy $FLAGS '$jj'" 
 						then
 							DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
+							[ -n "$opt_send" ] && SNAPS_DESTROY="$SNAPS_DESTROY
+$jj"
 						else
 							WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
 						fi
@@ -360,6 +363,24 @@ do_send () # snapname, oldglob
 		done
 	done
 }
+
+
+do_destroy_remotes ()
+{
+	local FLAGS="$1"
+	local ii
+	local remote_ssh="ssh $opt_send_ssh_opts"
+
+	# Go through each option to --send-{incr,full}.
+	# rem=<remote_host>:<remote_pool>
+	for rem in $opt_send; do
+		for ii in $SNAPS_DESTROY
+		do
+			do_run "$remote_ssh ${rem%:*} zfs destroy $FLAGS '$ii'"
+		done
+	done
+}
+
 
 # main ()
 # {
@@ -774,6 +795,7 @@ do_snapshots "$SNAPPROP" ""   "$SNAPNAME" "$SNAPGLOB" "$TARGETS_REGULAR"
 do_snapshots "$SNAPPROP" "-r" "$SNAPNAME" "$SNAPGLOB" "$TARGETS_RECURSIVE"
 
 do_send "$SNAPNAME" "$SNAPGLOB"
+do_destroy_remotes
 
 print_log notice "@$SNAPNAME," \
   "$SNAPSHOT_COUNT created," \
