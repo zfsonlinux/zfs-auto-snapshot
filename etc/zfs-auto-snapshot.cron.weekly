@@ -1,2 +1,3 @@
 #!/bin/sh
+PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/sbin"
 exec zfs-auto-snapshot --quiet --syslog --label=weekly --keep=8 //
