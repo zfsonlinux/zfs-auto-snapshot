@@ -1,3 +1,2 @@
 #!/bin/sh
-PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/sbin"
-exec zfs-auto-snapshot --quiet --syslog --label=daily --keep=31 //
+exec /usr/local/sbin/zfs-auto-snapshot --quiet --syslog --label=daily --keep=31 //
