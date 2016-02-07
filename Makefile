@@ -13,6 +13,7 @@ install:
 	install etc/zfs-auto-snapshot.cron.daily    $(DESTDIR)/etc/cron.daily/zfs-auto-snapshot
 	install etc/zfs-auto-snapshot.cron.weekly   $(DESTDIR)/etc/cron.weekly/zfs-auto-snapshot
 	install etc/zfs-auto-snapshot.cron.monthly  $(DESTDIR)/etc/cron.monthly/zfs-auto-snapshot
+	sed -i -e "s:zfs-auto-snapshot:$(DESTDIR)$(PREFIX)/sbin/zfs-auto-snapshot:g" $(DESTDIR)/etc/cron.{d,hourly,daily,weekly,monthly}/zfs-auto-snapshot
 	install -d $(DESTDIR)$(PREFIX)/share/man/man8
 	install src/zfs-auto-snapshot.8 $(DESTDIR)$(PREFIX)/share/man/man8/zfs-auto-snapshot.8
 	install -d $(DESTDIR)$(PREFIX)/sbin
