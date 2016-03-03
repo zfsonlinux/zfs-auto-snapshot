@@ -164,17 +164,18 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 	for ii in $TARGETS
 	do
 	# Check if size check is > 0
+	size_check_skip=''
 	if [ "$opt_min_size" -gt 0 ]
 	then
 		bytes_written=`zfs get -Hp -o value written $ii`
 		kb_written=$(( $bytes_written / 1024 ))
 		if [ "$kb_written" -lt "$opt_min_size" ]
 		then
-			opt_do_snapshots=''
+			size_check_skip=1
 		fi
 	fi
 
-	if [ -n "$opt_do_snapshots" ]
+	if [ -n "$opt_do_snapshots" -a -n "$size_check_skip" ]
 		then
 			if [ "$opt_pre_snapshot" != "" ]
 			then
