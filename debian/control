@@ -10,7 +10,7 @@ Vcs-Browser: https://github.com/zfsonlinux/zfs-auto-snapshot/
 
 Package: zfs-auto-snapshot
 Architecture: all
-Depends: ${misc:Depends}, cron, zfsutils
+Depends: ${misc:Depends}, cron, zfsutils | zfsutils-linux
 Description: ZFS Automatic Snapshot Service
  Automatically create and destroy ZFS snapshots on an hourly, daily, weekly
  and monthly schedule.
