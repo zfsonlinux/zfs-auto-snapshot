@@ -14,7 +14,7 @@ the zfs utilities and cron, and can run in the dash shell.
 Installation:
 -------------
 ```
-wget https://github.com/zfsonlinux/zfs-auto-snapshot/archive/master.zip
+wget https://github.com/ajhaydock/zfs-auto-snapshot/archive/master.zip
 unzip master.zip
 cd zfs-auto-snapshot-master
 sudo make install
