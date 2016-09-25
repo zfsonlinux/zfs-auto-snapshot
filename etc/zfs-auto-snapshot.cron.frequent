@@ -1,3 +1,0 @@
-PATH="/usr/bin:/bin:/usr/sbin:/sbin"
-
-*/15 * * * * root zfs-auto-snapshot -q -g --label=frequent --keep=4  //
