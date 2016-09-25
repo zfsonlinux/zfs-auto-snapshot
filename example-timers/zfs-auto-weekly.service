@@ -1,0 +1,5 @@
+[Unit]
+Description=Create a weekly ZFS snapshot of archive. Keep 4 of these.
+
+[Service]
+ExecStart=/usr/local/sbin/zfs-auto-snapshot archive --recursive --quiet --syslog --prefix="auto" --label="weekly" --keep=4

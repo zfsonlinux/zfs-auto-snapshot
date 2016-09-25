@@ -5,30 +5,30 @@ that is compatible with [ZFS on Linux](http://zfsonlinux.org/).
 
 My fork removes the automatic installation of cron entries that do things
 the user may not desire. This fork only installs the script and leaves manual
-crontab configuration up to the user.
+crontab/systemd-timer configuration up to the user.
 
 This program is a posixly correct bourne shell script.  It depends only on
-the zfs utilities and cron, and can run in the dash shell.
+the zfs utilities, and can run in the dash shell.
 
 
 Installation:
 -------------
 ```
-wget https://github.com/ajhaydock/zfs-auto-snapshot/archive/master.zip
-unzip master.zip
-cd zfs-auto-snapshot-master
+git clone https://github.com/ajhaydock/zfs-auto-snapshot.git
+cd zfs-auto-snapshot
 sudo make install
 ```
 
 
-Example Crontab Entries:
+Scheduling:
 -------------
+I recommend scheduling this using [systemd timers](https://wiki.archlinux.org/index.php/Systemd/Timers).
+
+You can find some example `.timer` files in the examples directory of this repo.
+
+Copy the `.timer` and corresponding `.service` file to `/etc/systemd/system/`, and then enable the timers as follows:
 ```
-## ZFS Auto Snapshot
-
-# At half past midnight every day, create a daily ZFS snapshot of 'archive'. Keep 7 of these.
-30 0 * * * /usr/local/sbin/zfs-auto-snapshot archive --recursive --quiet --syslog --prefix="auto" --label="daily" --keep=7
-
-# At 1AM every Monday, create a weekly ZFS snapshot of 'archive'. Keep 4 of these.
-0 1 * * 1 /usr/local/sbin/zfs-auto-snapshot archive --recursive  --quiet --syslog --prefix="auto" --label="weekly" --keep=4
+sudo systemctl daemon-reload
+sudo systemctl enable zfs-auto-daily.timer
+sudo systemctl enable zfs-auto-weekly.timer
 ```

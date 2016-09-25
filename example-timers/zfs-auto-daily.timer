@@ -1,0 +1,8 @@
+[Unit]
+Description=Daily ZFS snapshots.
+
+[Timer]
+OnCalendar=daily
+ 
+[Install]
+WantedBy=timers.target
