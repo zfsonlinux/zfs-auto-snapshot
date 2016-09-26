@@ -2,4 +2,5 @@
 Description=Create a daily ZFS snapshot of archive. Keep 7 of these.
 
 [Service]
+User=root
 ExecStart=/usr/local/sbin/zfs-auto-snapshot archive --recursive --quiet --syslog --prefix="auto" --label="daily" --keep=7
