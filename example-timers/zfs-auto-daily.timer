@@ -1,8 +1,8 @@
 [Unit]
-Description=Daily ZFS snapshots.
+Description=Daily ZFS snapshots at 1:15AM.
 
 [Timer]
-OnCalendar=daily
+OnCalendar=* *-*-* 01:15:00
  
 [Install]
 WantedBy=timers.target

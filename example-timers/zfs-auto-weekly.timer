@@ -1,8 +1,8 @@
 [Unit]
-Description=Weekly ZFS snapshots.
+Description=Weekly ZFS snapshots on Mondays at 1:30AM.
 
 [Timer]
-OnCalendar=weekly
+OnCalendar=Mon *-*-* 01:30:00
  
 [Install]
 WantedBy=timers.target
