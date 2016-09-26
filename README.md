@@ -29,6 +29,6 @@ You can find some example `.timer` files in the examples directory of this repo.
 Copy the `.timer` and corresponding `.service` file to `/etc/systemd/system/`, and then enable the timers as follows:
 ```
 sudo systemctl daemon-reload
-sudo systemctl enable zfs-auto-daily.timer
-sudo systemctl enable zfs-auto-weekly.timer
+sudo systemctl start zfs-auto-daily.timer && sudo systemctl enable zfs-auto-daily.timer
+sudo systemctl start zfs-auto-weekly.timer && sudo systemctl enable zfs-auto-weekly.timer
 ```
