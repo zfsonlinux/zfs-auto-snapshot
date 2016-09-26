@@ -2,7 +2,7 @@
 Description=Daily ZFS snapshots at 1:15AM.
 
 [Timer]
-OnCalendar=* *-*-* 01:15:00
+OnCalendar=*-*-* 01:15:00
  
 [Install]
 WantedBy=timers.target
