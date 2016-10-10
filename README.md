@@ -37,3 +37,30 @@ sudo systemctl start zfs-auto-hourly.timer && sudo systemctl enable zfs-auto-hou
 sudo systemctl start zfs-auto-daily.timer && sudo systemctl enable zfs-auto-daily.timer
 sudo systemctl start zfs-auto-weekly.timer && sudo systemctl enable zfs-auto-weekly.timer
 ```
+
+
+Managing Which Pools to Snapshot
+-------------
+By default, the script will snapshot all pools automatically, unless they have the `com.sun:auto-snapshot` property set to `false`.
+
+To check whether a pool has this property set, run the following command (where `archive` is the pool name):
+```
+sudo zfs get com.sun:auto-snapshot archive
+```
+
+If you see an output like the following, then snapshots are enabled on this pool:
+```
+NAME     PROPERTY               VALUE                  SOURCE
+archive  com.sun:auto-snapshot  -                      -
+```
+
+To disable snapshots on this pool, issue the following command:
+```
+sudo zfs set com.sun:auto-snapshot=false archive
+```
+
+We can check with `zfs get` again, and this time our output should look like the following. If we see this, we know that snapshots have been disabled on this pool:
+```
+NAME     PROPERTY               VALUE                  SOURCE
+archive  com.sun:auto-snapshot  false                  local
+```
