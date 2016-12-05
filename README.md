@@ -24,13 +24,10 @@ Scheduling:
 -------------
 I recommend scheduling this using [systemd timers](https://wiki.archlinux.org/index.php/Systemd/Timers).
 
-You can find some example `.timer` files in the examples directory of this repo.
+You can find some example `.timer` files in the `timers/` directory of this repo. They will be installed when you run `make install`.
 
-Copy the `.timer` and corresponding `.service` file to `/etc/systemd/system/`:
 ```
-cp -f -v *.timer *.service /etc/systemd/system/
-```
-Then enable the timers as follows:
+You can enable the timers as follows:
 ```
 sudo systemctl daemon-reload
 sudo systemctl start zfs-auto-hourly.timer && sudo systemctl enable zfs-auto-hourly.timer
@@ -38,14 +35,16 @@ sudo systemctl start zfs-auto-daily.timer && sudo systemctl enable zfs-auto-dail
 sudo systemctl start zfs-auto-weekly.timer && sudo systemctl enable zfs-auto-weekly.timer
 ```
 
+If you wish to edit the timers, you will find them in the `/etc/systemd/system/` directory.
+
 
 Managing Which Pools to Snapshot
 -------------
 By default, the script will snapshot all pools automatically, unless they have the `com.sun:auto-snapshot` property set to `false`.
 
-To check whether a pool has this property set, run the following command (where `archive` is the pool name):
+To check the status of this property for all of your pools and datasets, run the following command:
 ```
-sudo zfs get com.sun:auto-snapshot archive
+sudo zfs get com.sun:auto-snapshot
 ```
 
 If you see an output like the following, then snapshots are enabled on this pool:
@@ -63,4 +62,9 @@ We can check with `zfs get` again, and this time our output should look like the
 ```
 NAME     PROPERTY               VALUE                  SOURCE
 archive  com.sun:auto-snapshot  false                  local
+```
+
+To disable snapshots on a single dataset, the command is very similar:
+```
+sudo zfs set com.sun:auto-snapshot=false archive/dataset
 ```
