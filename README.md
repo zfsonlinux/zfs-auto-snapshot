@@ -26,7 +26,6 @@ I recommend scheduling this using [systemd timers](https://wiki.archlinux.org/in
 
 You can find some example `.timer` files in the `timers/` directory of this repo. They will be installed when you run `make install`.
 
-```
 You can enable the timers as follows:
 ```
 sudo systemctl daemon-reload
