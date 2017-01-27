@@ -46,11 +46,33 @@ PRE is 'zfs\-auto\-snap' by default.
 \fB\-q\fR, \fB\-\-quiet\fR
 Suppress warnings and notices at the console.
 .TP
-\fB\-\-send\-full\fR=\fIF\fR
-Send zfs full backup. Unimplemented.
+\fB\-\-send\-full\fR=[\fIremote host\fR]:[\fIremote pool\fR][;...]
+Send zfs full backup to remote hostname (or IP address) and put it in  remote pool.
 .TP
-\fB\-\-send\-incr\fR=\fIF\fR
-Send zfs incremental backup. Unimplemented.
+\fB\-\-send\-incr\fR=[\fIremote host\fR]:[\fIremote pool\fR][;...]
+Send zfs incremental backup to remote hostname (or IP address) and put it in remote pool.
+.TP
+\fB\-\-send\-fallback\fR
+Allow to fallback from incremental to full snapshot replication.
+.sp
+This implies \fI-R\fR to \fBzfs send\fR and \fI-F\fR to \fBzfs receive\fR.
+.TP
+\fB\-\-send\-opts\fR=\fIOPTS\fR
+Option(s) passed to 'zfs send'.
+.TP
+\fB\-\-recv\-opts\fR=\fIOPTS\fR
+Option(s) passed to 'zfs receive'.
+.TP
+\fB\-\-send\-ssh\-opts\fR=\fIOPTS\fR
+Option(s) passed to 'ssh' in the replication command line.
+.sp
+See \fBssh\fR(1) for availible options.
+.TP
+\fB\-\-send\-mbuf\-opts\fR=\fIOPTS\fR
+Use \fBmbuffer\fR (with these options) between 'zfs send' and
+\'ssh <host> zfs receive <pool>'.
+.sp
+See \fBmbuffer\fR(1) for availible options.
 .TP
 \fB\-\-sep\fR=\fICHAR\fR
 Use CHAR to separate date stamps in snapshot names.
@@ -73,6 +95,16 @@ aborted.
 \fB\-\-post-snapshot\fR=\fICOMMAND\fR
 Command to run after each dataset is snapshotted. 
 It is passed the dataset and snapshot name.
+.TP
+\fB\-\-pre-send\fR=\fICOMMAND\fR
+Command to run before each snapshot is sent to
+remote host. It is passed the snapshot name. If
+it returns non-zero, sending this dataset is
+aborted.
+.TP
+\fB\-\-post-send\fR=\fICOMMAND\fR
+Command to run after each snapshot have been sent.
+It is passed the snapshot name.
 .TP
 \fB\-\-destroy-only\fR
 Do not create new snapshots, but do destroy older 

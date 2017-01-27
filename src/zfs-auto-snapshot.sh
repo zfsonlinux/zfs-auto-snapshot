@@ -34,6 +34,14 @@ opt_keep=''
 opt_label=''
 opt_prefix='zfs-auto-snap'
 opt_recursive=''
+opt_send_type=''
+opt_send=''
+opt_send_opts=''
+opt_send_only=''
+opt_recv_opts=''
+opt_send_ssh_opts=''
+opt_send_mbuf_opts=''
+opt_send_fallback=''
 opt_sep='_'
 opt_setauto=''
 opt_syslog=''
@@ -41,6 +49,8 @@ opt_skip_scrub=''
 opt_verbose=''
 opt_pre_snapshot=''
 opt_post_snapshot=''
+opt_pre_send=''
+opt_post_send=''
 opt_do_snapshots=1
 
 # Global summary statistics.
@@ -50,30 +60,39 @@ WARNING_COUNT='0'
 
 # Other global variables.
 SNAPSHOTS_OLD=''
+SNAPS_DONE=''
+SNAPS_DESTROY=''
 
 
 print_usage ()
 {
 	echo "Usage: $0 [options] [-l label] <'//' | name [name...]>
-  --default-exclude  Exclude datasets if com.sun:auto-snapshot is unset.
-  -d, --debug        Print debugging messages.
-  -e, --event=EVENT  Set the com.sun:auto-snapshot-desc property to EVENT.
-      --fast         Use a faster zfs list invocation.
-  -n, --dry-run      Print actions without actually doing anything.
-  -s, --skip-scrub   Do not snapshot filesystems in scrubbing pools.
-  -h, --help         Print this usage message.
-  -k, --keep=NUM     Keep NUM recent snapshots and destroy older snapshots.
-  -l, --label=LAB    LAB is usually 'hourly', 'daily', or 'monthly'.
-  -p, --prefix=PRE   PRE is 'zfs-auto-snap' by default.
-  -q, --quiet        Suppress warnings and notices at the console.
-      --send-full=F  Send zfs full backup. Unimplemented.
-      --send-incr=F  Send zfs incremental backup. Unimplemented.
-      --sep=CHAR     Use CHAR to separate date stamps in snapshot names.
-  -g, --syslog       Write messages into the system log.
-  -r, --recursive    Snapshot named filesystem and all descendants.
-  -v, --verbose      Print info messages.
-      --destroy-only Only destroy older snapshots, do not create new ones.
-      name           Filesystem and volume names, or '//' for all ZFS datasets.
+  --default-exclude     Exclude datasets if com.sun:auto-snapshot is unset.
+  -d, --debug           Print debugging messages.
+  -e, --event=EVENT     Set the com.sun:auto-snapshot-desc property to EVENT.
+      --fast            Use a faster zfs list invocation.
+  -n, --dry-run         Print actions without actually doing anything.
+  -s, --skip-scrub      Do not snapshot filesystems in scrubbing pools.
+  -h, --help            Print this usage message.
+  -k, --keep=NUM        Keep NUM recent snapshots and destroy older snapshots.
+  -l, --label=LAB       LAB is usually 'hourly', 'daily', or 'monthly'.
+  -p, --prefix=PRE      PRE is 'zfs-auto-snap' by default.
+  -q, --quiet           Suppress warnings and notices at the console.
+      --send-full=F     Send zfs full backup.
+      --send-incr=F     Send zfs incremental backup.
+      --send-fallback   Fallback from incremental to full if needed.
+      --send-opts=F     Option(s) passed to 'zfs send'.
+      --recv-opts=F     Option(s) passed to 'zfs receive'.
+      --send-ssh-opts   Option(s) passed to 'ssh'.
+      --send-mbuf-opts  Use mbuffer (with these options) between 'zfs send'
+                        and 'ssh <host> zfs receive'.
+      --send-only       Only send the the most recent snapshot
+      --sep=CHAR        Use CHAR to separate date stamps in snapshot names.
+  -g, --syslog          Write messages into the system log.
+  -r, --recursive       Snapshot named filesystem and all descendants.
+  -v, --verbose         Print info messages.
+      --destroy-only    Only destroy older snapshots, do not create new ones.
+      name              Filesystem and volume names, or '//' for all ZFS datasets.
 " 
 }
 
@@ -144,6 +163,75 @@ do_run () # [argv]
 }
 
 
+find_last_snap () # dset, GLOB
+{
+	local snap="$1"
+	local GLOB="$2"
+
+	local dset="${snap%@*}"
+	local last_snap
+	local jj
+
+	# STEP 1: Go through ALL snapshots that exist, look for exact
+	#         match on dataset/volume (with snapshot matching 'GLOB').
+	for jj in $SNAPSHOTS_OLD
+	do
+		# Check whether this is an old snapshot of the filesystem.
+		if [ -z "${jj#$dset@$GLOB}" ]; then
+			# We want the FIRST one (which is the last in time
+			# before the one we just created in do_snapshot()).
+			# Also, here we just need the snapshot name.
+			last_snap="${jj#*@}"
+			break
+		fi
+	done
+
+	# NOTE: If we don't have any previous snapshots (for example, we've
+	#       just created the first one) we can end up with last_snap=''
+	#       here.
+	#       If we're called with '--send-incr' we have to options:
+	#         1: We change from incremental to full.
+	#         2: We accept that the user have said INCR, and stick with
+	#            it.
+	#       Normally we do point 2, but if --send-fallback is specified,
+	#       we allow it and convert to a full send instead.
+	if [ "$opt_send_type" = "incr" -a -z "$last_snap" -a -z "$opt_send_fallback" ]; then
+		if [ -n "$opt_verbose" ]; then
+			echo > /dev/stderr "WARNING: No previous snapshots exist but we where called"
+			echo > /dev/stderr "         with --send-incr. Can not continue."
+			echo > /dev/stderr "         Please rerun with --send-full."
+			echo > /dev/stderr "         Or use --send-fallback."
+		fi
+		return 1
+	fi
+
+	if [ -n "$opt_recursive" ]; then
+		# STEP 2: Again, go through ALL snapshots that exists, but this
+		#         time only look for the snapshots that 'starts with'
+		#         the dataset/volume in question AND 'ends with'
+		#         the exact snapshot name/date in step 2.
+		for jj in $SNAPSHOTS_OLD
+		do
+			# When trying to find snapshots recurively, we MUST have a 'last_snap'
+			# value. Othervise, it will match ALL snapshots for dset (if we had
+			# used '"^$dset.*@$GLOB" only).
+			if [ -z "$last_snap" ] && echo "$jj" | grep -qE "^$dset.*@$GLOB"; then
+				# Use this as last snapshot name
+				last_snap="${jj#*@}"
+			fi
+
+			if echo "$jj" | grep -qE "^$dset.*@$last_snap"; then
+				echo $jj
+			fi
+		done
+	else
+		echo "$snap"
+	fi
+
+	return 0
+}
+
+
 do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 {
 	local PROPS="$1"
@@ -170,6 +258,8 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 			if [ $RUNSNAP -eq 1 ] && do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'"
 			then
 				[ "$opt_post_snapshot" != "" ] && do_run "$opt_post_snapshot $ii $NAME"
+				[ -n "$opt_send" ] && SNAPS_DONE="$SNAPS_DONE
+$ii@$NAME"
 				SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT + 1 ))
 			else
 				WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
@@ -177,28 +267,116 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 			fi 
 		fi
 
+		[ -n "$opt_send_only" ] && tmp=$(find_last_snap "$ii@$NAME" "$GLOB")
+		[ -n "$tmp" ] && SNAPS_DONE="$SNAPS_DONE
+$tmp"
+
 		# Retain at most $opt_keep number of old snapshots of this filesystem,
 		# including the one that was just recently created.
 		test -z "$opt_keep" && continue
 		KEEP="$opt_keep"
 
-		# ASSERT: The old snapshot list is sorted by increasing age.
-		for jj in $SNAPSHOTS_OLD
-		do
-			# Check whether this is an old snapshot of the filesystem.
-			if [ -z "${jj#$ii@$GLOB}" ]
-			then
-				KEEP=$(( $KEEP - 1 ))
-				if [ "$KEEP" -le '0' ]
+		if [ -z "$opt_send_only" ]; then
+			# ASSERT: The old snapshot list is sorted by increasing age.
+			for jj in $SNAPSHOTS_OLD
+			do
+				# Check whether this is an old snapshot of the filesystem.
+				if [ -z "${jj#$ii@$GLOB}" ]
 				then
-					if do_run "zfs destroy $FLAGS '$jj'" 
+					KEEP=$(( $KEEP - 1 ))
+					if [ "$KEEP" -le '0' ]
 					then
-						DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
-					else
-						WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
+						if do_run "zfs destroy $FLAGS '$jj'" 
+						then
+							DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
+							[ -n "$opt_send" ] && SNAPS_DESTROY="$SNAPS_DESTROY
+$jj"
+						else
+							WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
+						fi
 					fi
 				fi
+			done
+		fi
+	done
+}
+
+do_send () # snapname, oldglob
+{
+	local NAME="$1"
+	local GLOB="$2"
+	local RUNSEND=1
+	local remote_ssh="ssh $opt_send_ssh_opts"
+	local remote_recv="zfs receive $opt_recv_opts"
+	local remote_mbuf=""
+	local ii
+	local jj
+
+	[ -n "$opt_send_mbuf_opts" ] && remote_mbuf="mbuffer $opt_send_mbuf_opts |"
+
+	# STEP 1: Go throug all snapshots we've created
+	for ii in $SNAPS_DONE
+	do
+		opts=''
+		SNAPS_SEND=''
+
+		# STEP 2: Find the last snapshot
+		SNAPS_SEND=$(find_last_snap "$ii" "$GLOB")
+
+		# STEP 3: Go through all snapshots that is to be transfered and send them.
+		for jj in $SNAPS_SEND
+		do
+			if [ -n "$opt_pre_send" ]; then
+				do_run "$opt_pre_send $jj" || RUNSEND=0
 			fi
+
+			if [ $RUNSEND -eq 1 ]; then
+				# Go through each option to --send-{incr,full}.
+				# rem=<remote_host>:<remote_pool>
+				for rem in $opt_send; do
+					if [ "$opt_send_type" = "incr" ]; then
+						if [ "$jj" = "$ii" -a -n "$opt_send_fallback" ]; then
+							cmd="zfs send $opt_send_opts -R $ii |"
+							cmd="$cmd $remote_mbuf"
+							cmd="$cmd $remote_ssh ${rem%:*}"
+							cmd="$cmd $remote_recv -F ${rem#*:}"
+						else
+							cmd="zfs send $opt_send_opts -i $jj $ii |"
+							cmd="$cmd $remote_mbuf"
+							cmd="$cmd $remote_ssh ${rem%:*}"
+							cmd="$cmd $remote_recv ${rem#*:}"
+						fi
+					else
+						cmd="zfs send $opt_send_opts -R $jj |"
+						cmd="$cmd $remote_mbuf"
+						cmd="$cmd $remote_ssh ${rem%:*}"
+						cmd="$cmd $remote_recv ${rem#*:}"
+					fi
+
+					do_run "$cmd" || RUNSEND=0
+				done
+
+				if [ $RUNSEND = 1 -a -n "$opt_post_send" ]; then
+					do_run "$opt_post_send $jj" || RUNSEND=0
+				fi
+			fi
+		done
+	done
+}
+
+
+do_destroy_remotes ()
+{
+	local FLAGS="$1"
+	local ii
+	local remote_ssh="ssh $opt_send_ssh_opts"
+
+	# Go through each option to --send-{incr,full}.
+	# rem=<remote_host>:<remote_pool>
+	for rem in $opt_send; do
+		for ii in $SNAPS_DESTROY
+		do
+			do_run "$remote_ssh ${rem%:*} zfs destroy $FLAGS '$ii'"
 		done
 	done
 }
@@ -212,6 +390,9 @@ GETOPT=$(getopt \
   --longoptions=event:,keep:,label:,prefix:,sep: \
   --longoptions=debug,help,quiet,syslog,verbose \
   --longoptions=pre-snapshot:,post-snapshot:,destroy-only \
+  --longoptions=send-full:,send-incr:,send-opts:,recv-opts: \
+  --longoptions=send-ssh-opts:,send-mbuf-opts:,pre-send:,post-send: \
+  --longoptions=send-fallback,send-only \
   --options=dnshe:l:k:p:rs:qgv \
   -- "$@" ) \
   || exit 128
@@ -296,6 +477,44 @@ do
 			opt_recursive='1'
 			shift 1
 			;;
+		(--send-full)
+			opt_send_type='full'
+			opt_send_opts="$opt_send_opts -R"
+			opt_send=$(echo "$2" | sed 's,;,\
+,g')
+			shift 2
+			;;
+		(--send-incr)
+			opt_send_type='incr'
+			opt_send=$(echo "$2" | sed 's,;,\
+,g')
+			shift 2
+			;;
+		(--send-fallback)
+			opt_send_fallback=1
+			shift 1
+			;;
+		(--send-only)
+			opt_send_only=1
+			opt_do_snapshots=''
+			shift 1
+			;;
+		(--send-opts)
+			opt_send_opts="$2"
+			shift 2
+			;;
+		(--recv-opts)
+			opt_recv_opts="$2"
+			shift 2
+			;;
+		(--send-ssh-opts)
+			opt_send_ssh_opts="$2"
+			shift 2
+			;;
+		(--send-mbuf-opts)
+			opt_send_mbuf_opts="$2"
+			shift 2
+			;;
 		(--sep)
 			case "$2" in 
 				([[:alnum:]_.:\ -])
@@ -328,6 +547,14 @@ do
 			;;
 		(--post-snapshot)
 			opt_post_snapshot="$2"
+			shift 2
+			;;
+		(--pre-send)
+			opt_pre_send="$2"
+			shift 2
+			;;
+		(--post-send)
+			opt_post_send="$2"
 			shift 2
 			;;
 		(--destroy-only)
@@ -570,6 +797,9 @@ test -n "$opt_dry_run" \
 
 do_snapshots "$SNAPPROP" ""   "$SNAPNAME" "$SNAPGLOB" "$TARGETS_REGULAR"
 do_snapshots "$SNAPPROP" "-r" "$SNAPNAME" "$SNAPGLOB" "$TARGETS_RECURSIVE"
+
+do_send "$SNAPNAME" "$SNAPGLOB"
+do_destroy_remotes
 
 print_log notice "@$SNAPNAME," \
   "$SNAPSHOT_COUNT created," \
