@@ -42,6 +42,7 @@ opt_verbose=''
 opt_pre_snapshot=''
 opt_post_snapshot=''
 opt_do_snapshots=1
+opt_min_size=0
 
 # Global summary statistics.
 DESTRUCTION_COUNT='0'
@@ -65,6 +66,7 @@ print_usage ()
   -k, --keep=NUM     Keep NUM recent snapshots and destroy older snapshots.
   -l, --label=LAB    LAB is usually 'hourly', 'daily', or 'monthly'.
   -p, --prefix=PRE   PRE is 'zfs-auto-snap' by default.
+  -m, --min-size=n   Require at least n kB written to snapshot.
   -q, --quiet        Suppress warnings and notices at the console.
       --send-full=F  Send zfs full backup. Unimplemented.
       --send-incr=F  Send zfs incremental backup. Unimplemented.
@@ -161,7 +163,19 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 
 	for ii in $TARGETS
 	do
-		if [ -n "$opt_do_snapshots" ]
+	# Check if size check is > 0
+	size_check_skip=0
+	if [ "$opt_min_size" -gt 0 ]
+	then
+		bytes_written=`zfs get -Hp -o value written $ii`
+		kb_written=$(( $bytes_written / 1024 ))
+		if [ "$kb_written" -lt "$opt_min_size" ]
+		then
+			size_check_skip=1
+		fi
+	fi
+
+	if [ -n "$opt_do_snapshots" -a "$size_check_skip" -eq 0 ]
 		then
 			if [ "$opt_pre_snapshot" != "" ]
 			then
@@ -212,7 +226,8 @@ GETOPT=$(getopt \
   --longoptions=event:,keep:,label:,prefix:,sep: \
   --longoptions=debug,help,quiet,syslog,verbose \
   --longoptions=pre-snapshot:,post-snapshot:,destroy-only \
-  --options=dnshe:l:k:p:rs:qgv \
+  --longoptions=min-size:
+  --options=dnshe:l:k:m:p:rs:qgv \
   -- "$@" ) \
   || exit 128
 
@@ -269,6 +284,10 @@ do
 			;;
 		(-l|--label)
 			opt_label="$2"
+			shift 2
+			;;
+		(-m|--min-size)
+			opt_min_size="$2"
 			shift 2
 			;;
 		(-p|--prefix)
