@@ -32,7 +32,7 @@ make install
 As suggested by [Brian Koopman][bkoop] this target uses [systemd-timers][dtim]
 instead of cron.
 
-1) install the scripts:
+1. install the scripts:
 
     ```
     wget https://github.com/gaerfield/zfs-auto-snapshot/archive/master.zip
@@ -41,9 +41,9 @@ instead of cron.
     make systemd
     ```
 
-2) optionally edit `zfs-auto-snapshot-frequent.timer` to snapshot more often and `zfs-auto-snapshot-frequent.service` to keep more snapshots
-3) enable zfs snapshots: `zfs set com.sun:auto-snapshot=true pool/dataset`
-4) enable timers:
+2. optionally edit `zfs-auto-snapshot-frequent.timer` to snapshot more often and `zfs-auto-snapshot-frequent.service` to keep more snapshots
+3. enable zfs snapshots: `zfs set com.sun:auto-snapshot=true pool/dataset`
+4. enable timers:
 
     ```
     systemctl enable zfs-auto-snapshot-daily.timer
