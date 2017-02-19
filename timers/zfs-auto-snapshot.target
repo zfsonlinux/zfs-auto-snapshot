@@ -1,3 +1,4 @@
+# See systemd.target and systemd.unit manpages for details
 [Unit]
 Description=Automatically create, rotate, and destroy periodic ZFS snapshots.
 Requires=zfs-auto-snapshot-frequent.timer

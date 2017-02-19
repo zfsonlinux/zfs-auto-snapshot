@@ -1,4 +1,4 @@
-# See systemd.timers and systemd.time manpages for details
+# See systemd.timer and systemd.time manpages for details
 [Unit]
 Description=ZFS hourly snapshot timer
 
