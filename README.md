@@ -41,7 +41,21 @@ instead of cron.
     make systemd
     ```
 
-2. optionally edit `zfs-auto-snapshot-frequent.timer` to snapshot more often and `zfs-auto-snapshot-frequent.service` to keep more snapshots
+2. optionally edit `zfs-auto-snapshot-frequent.timer` to snapshot more often and `zfs-auto-snapshot-frequent.service` to keep more snapshots by:
+
+    ```
+    cp /lib/systemd/system/zfs-auto-snapshot-frequent.timer /usr/systemd/system/zfs-auto-snapshot-frequent.timer
+    cp /lib/systemd/system/zfs-auto-snapshot-frequent.service /usr/systemd/system/zfs-auto-snapshot-frequent.service
+
+    # in zfs-auto-snapshot-frequent.timer change OnCalendar from '*:0/15' (every 15 minutes) to i.e. '*:0/5' (every 5 minutes)
+    [Timer]
+    OnCalendar=*:0/5
+
+    # in zfs-auto-snapshot-frequent.service the number in --keep should match the count of collected snapshots per hour (60/5 = 12)
+    [Service]
+    ExecStart=/usr/bin/zfs-auto-snapshot --quiet --syslog --label=frequent --keep=12 //
+    ```
+
 3. enable zfs snapshots: `zfs set com.sun:auto-snapshot=true pool/dataset`
 4. enable timers:
 
