@@ -1,5 +1,0 @@
-[Unit]
-Description=Daily ZFS snapshots at 1:20AM.
-
-[Timer]
-OnCalendar=*-*-* 01:20:00

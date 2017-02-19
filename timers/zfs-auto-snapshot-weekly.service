@@ -1,0 +1,5 @@
+[Unit]
+Description=ZFS weekly snapshot service
+
+[Service]
+ExecStart=/usr/local/sbin/zfs-auto-snapshot --quiet --syslog --label=weekly --keep=8 //

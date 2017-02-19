@@ -1,0 +1,4 @@
+Description=ZFS frequent snapshot service
+
+[Service]
+ExecStart=/usr/local/sbin/zfs-auto-snapshot --quiet --syslog --label=frequent --keep=4 //

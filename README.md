@@ -3,37 +3,50 @@
 An alternative implementation of the zfs-auto-snapshot service for Linux
 that is compatible with [ZFS on Linux](http://zfsonlinux.org/).
 
-My fork removes the automatic installation of cron entries that do things
-the user may not desire. This fork only installs the script and leaves manual
-crontab/systemd-timer configuration up to the user.
+Automatically create, rotate, and destroy periodic ZFS snapshots. This is
+the utility that creates the:
+
+* @zfs-auto-snap_frequent,
+* @zfs-auto-snap_hourly,
+* @zfs-auto-snap_daily,
+* @zfs-auto-snap_weekly, and
+* @zfs-auto-snap_monthly
+
+snapshots if it is installed.
+
+## Installation using cron
 
 This program is a posixly correct bourne shell script.  It depends only on
-the zfs utilities, and can run in the dash shell.
+the zfs utilities and cron, and can run in the dash shell (using the scripts in
+`etc`).
 
-
-Installation:
--------------
 ```
-git clone https://github.com/ajhaydock/zfs-auto-snapshot.git
-cd zfs-auto-snapshot
-sudo make install
+wget https://github.com/zfsonlinux/zfs-auto-snapshot/archive/master.zip
+unzip master.zip
+cd zfs-auto-snapshot-master
+make install
 ```
 
+## Installation using systemd
 
-Scheduling:
--------------
 I recommend scheduling this using [systemd timers](https://wiki.archlinux.org/index.php/Systemd/Timers).
 
 You can find some example `.timer` files in the `timers/` directory of this repo. They will be installed when you run `make install`.
 
 You can enable the timers as follows:
+
 ```
-sudo systemctl daemon-reload
-sudo systemctl start zfs-auto.target && sudo systemctl enable zfs-auto.target
+    wget https://github.com/gaerfield/zfs-auto-snapshot/archive/master.zip
+    unzip master.zip
+    cd zfs-auto-snapshot-master
+    make systemd
 ```
 
 If you wish to edit the timers, you will find them in the `/usr/local/lib/systemd/system/` directory. Save the edited timers to `/etc/systemd/system/` directory.
 
+    ```
+    cp /lib/systemd/system/zfs-auto-snapshot-frequent.timer /usr/systemd/system/
+    cp /lib/systemd/system/zfs-auto-snapshot-frequent.service /usr/systemd/system/
 
 Managing Which Pools to Snapshot
 -------------

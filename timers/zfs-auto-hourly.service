@@ -1,5 +1,0 @@
-[Unit]
-Description=Create an hourly ZFS snapshot of archive. Keep 24 of these.
-
-[Service]
-ExecStart=/usr/local/sbin/zfs-auto-snapshot --quiet --syslog --prefix=auto --label=hourly --keep=24 //
