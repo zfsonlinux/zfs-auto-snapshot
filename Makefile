@@ -14,3 +14,4 @@ install:
 	install timers/zfs-auto-hourly.timer $(DESTDIR)$(PREFIX)/lib/systemd/system/zfs-auto-hourly.timer
 	install timers/zfs-auto-weekly.service $(DESTDIR)$(PREFIX)/lib/systemd/system/zfs-auto-weekly.service
 	install timers/zfs-auto-weekly.timer $(DESTDIR)$(PREFIX)/lib/systemd/system/zfs-auto-weekly.timer
+	install timers/zfs-auto.target $(DESTDIR)$(PREFIX)/lib/systemd/system/zfs-auto.target

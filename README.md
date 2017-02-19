@@ -29,12 +29,10 @@ You can find some example `.timer` files in the `timers/` directory of this repo
 You can enable the timers as follows:
 ```
 sudo systemctl daemon-reload
-sudo systemctl start zfs-auto-hourly.timer && sudo systemctl enable zfs-auto-hourly.timer
-sudo systemctl start zfs-auto-daily.timer && sudo systemctl enable zfs-auto-daily.timer
-sudo systemctl start zfs-auto-weekly.timer && sudo systemctl enable zfs-auto-weekly.timer
+sudo systemctl start zfs-auto.target && sudo systemctl enable zfs-auto.target
 ```
 
-If you wish to edit the timers, you will find them in the `/etc/systemd/system/` directory.
+If you wish to edit the timers, you will find them in the `/usr/local/lib/systemd/system/` directory. Save the edited timers to `/etc/systemd/system/` directory.
 
 
 Managing Which Pools to Snapshot
