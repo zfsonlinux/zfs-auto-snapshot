@@ -5,10 +5,10 @@ all:
 .PHONY: all
 
 install:
-	install -d $(DESTDIR)$(PREFIX)/sbin $(DESTDIR)$(PREFIX)/share/man/man8
+	install -m 0755 -d $(DESTDIR)$(PREFIX)/sbin $(DESTDIR)$(PREFIX)/share/man/man8
 	install -m 0755 src/zfs-auto-snapshot.sh $(DESTDIR)$(PREFIX)/sbin/zfs-auto-snapshot
-	install -m 0422 -t $(DESTDIR)$(PREFIX)/share/man/man8 src/zfs-auto-snapshot.8
-	install -m 0422 -t $(DESTDIR)$(SYSTEMD_HOME) \
+	install -m 0644 -t $(DESTDIR)$(PREFIX)/share/man/man8 src/zfs-auto-snapshot.8
+	install -m 0644 -t $(DESTDIR)$(SYSTEMD_HOME) \
 		timers/zfs-auto-snapshot-daily.service \
 		timers/zfs-auto-snapshot-daily.timer \
 		timers/zfs-auto-snapshot-frequent.service \
