@@ -41,7 +41,7 @@ instead of cron.
     make systemd
     ```
 
-2. optionally edit `zfs-auto-snapshot-frequent.timer` to snapshot more often and `zfs-auto-snapshot-frequent.service` to keep more snapshots by:
+2. optionally edit `zfs-auto-snapshot-frequent.timer` to snapshot more often and `zfs-auto-snapshot-frequent.service` to keep more snapshots by (dont forget to `systemctl daemon-reload`):
 
     ```
     cp /lib/systemd/system/zfs-auto-snapshot-frequent.timer /usr/systemd/system/
@@ -57,17 +57,16 @@ instead of cron.
     ```
 
 3. enable zfs snapshots: `zfs set com.sun:auto-snapshot=true pool/dataset`
-4. enable timers:
+
+4. start timers:
 
     ```
-    systemctl enable zfs-auto-snapshot-daily.timer
-    systemctl enable zfs-auto-snapshot-frequent.timer
-    systemctl enable zfs-auto-snapshot-hourly.timer
-    systemctl enable zfs-auto-snapshot-daily.timer
-    systemctl enable zfs-auto-snapshot-weekly.timer
-    systemctl enable zfs-auto-snapshot-monthly.timer
+    systemctl start zfs-auto-snapshot-monthly.timer
+    systemctl start zfs-auto-snapshot-weekly.timer
+    systemctl start zfs-auto-snapshot-daily.timer
+    systemctl start zfs-auto-snapshot-hourly.timer
+    systemctl start zfs-auto-snapshot-frequent.timer
     ```
-
 
 [bkoop]: https://briankoopman.com/zfs-automated-snapshots/
 [dtim]: https://wiki.archlinux.org/index.php/Systemd/Timers
