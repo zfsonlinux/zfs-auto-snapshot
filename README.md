@@ -30,10 +30,10 @@ make install
 ## Installation using systemd
 
 ```sh
-wget https://github.com/zfsonlinux/zfs-auto-snapshot/archive/master.zip
-unzip master.zip
-cd zfs-auto-snapshot-master
-make systemd
+wget https://github.com/zfsonlinux/zfs-auto-snapshot/archive/systemd.zip
+unzip systemd.zip
+cd zfs-auto-snapshot-systemd
+make install enable
 ```
 
 ### Scheduling
@@ -41,7 +41,8 @@ make systemd
 See [systemd timers](https://wiki.archlinux.org/index.php/Systemd/Timers).
 
 You can find some example `.timer` files in the `timers/` directory of this
-repo. They will be installed when you run `make systemd`.
+repo. They will be installed when you run `make install` from the `systemd`
+git branch.
 
 If you wish to edit the timers, you will find them in the
 `/usr/local/lib/systemd/system/` directory. Save the edited timers to
