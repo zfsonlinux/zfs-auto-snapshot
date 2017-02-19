@@ -1,2 +1,0 @@
-#!/bin/sh
-exec zfs-auto-snapshot --quiet --syslog --label=monthly --keep=12 //
