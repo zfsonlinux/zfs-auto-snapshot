@@ -2,4 +2,4 @@
 Description=ZFS monthly snapshot service
 
 [Service]
-ExecStart=/usr/bin/zfs-auto-snapshot  --quiet --syslog --label=monthly --keep=12 //
+ExecStart=zfs-auto-snapshot  --quiet --syslog --label=monthly --keep=12 //

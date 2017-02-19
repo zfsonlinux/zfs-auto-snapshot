@@ -1,5 +1,5 @@
 PREFIX := /usr/local
-
+SYSTEMD_HOME := /lib/systemd/system
 all:
 
 install:
@@ -20,16 +20,16 @@ install:
 
 systemd:
 	install -d $(DESTDIR)/lib/systemd/system/
-	install timers/zfs-auto-snapshot-frequent.service	$(DESTDIR)/lib/systemd/system/zfs-auto-snapshot-frequent.service
-	install timers/zfs-auto-snapshot-frequent.timer	$(DESTDIR)/lib/systemd/system/zfs-auto-snapshot-frequent.timer
-	install timers/zfs-auto-snapshot-hourly.service	$(DESTDIR)/lib/systemd/system/zfs-auto-snapshot-hourly.service
-	install timers/zfs-auto-snapshot-hourly.timer	$(DESTDIR)/lib/systemd/system/zfs-auto-snapshot-hourly.timer
-	install timers/zfs-auto-snapshot-daily.service	$(DESTDIR)/lib/systemd/system/zfs-auto-snapshot-daily.service
-	install timers/zfs-auto-snapshot-daily.timer	$(DESTDIR)/lib/systemd/system/zfs-auto-snapshot-daily.timer
-	install timers/zfs-auto-snapshot-weekly.service	$(DESTDIR)/lib/systemd/system/zfs-auto-snapshot-weekly.service
-	install timers/zfs-auto-snapshot-weekly.timer	$(DESTDIR)/lib/systemd/system/zfs-auto-snapshot-weekly.timer
-	install timers/zfs-auto-snapshot-monthly.service	$(DESTDIR)/lib/systemd/system/zfs-auto-snapshot-monthly.service
-	install timers/zfs-auto-snapshot-monthly.timer	$(DESTDIR)/lib/systemd/system/zfs-auto-snapshot-monthly.timer
+	install timers/zfs-auto-snapshot-frequent.service	$(DESTDIR)/$(SYSTEMD_HOME)/zfs-auto-snapshot-frequent.service
+	install timers/zfs-auto-snapshot-frequent.timer	$(DESTDIR)/$(SYSTEMD_HOME)/zfs-auto-snapshot-frequent.timer
+	install timers/zfs-auto-snapshot-hourly.service	$(DESTDIR)/$(SYSTEMD_HOME)/zfs-auto-snapshot-hourly.service
+	install timers/zfs-auto-snapshot-hourly.timer	$(DESTDIR)/$(SYSTEMD_HOME)/zfs-auto-snapshot-hourly.timer
+	install timers/zfs-auto-snapshot-daily.service	$(DESTDIR)/$(SYSTEMD_HOME)/zfs-auto-snapshot-daily.service
+	install timers/zfs-auto-snapshot-daily.timer	$(DESTDIR)/$(SYSTEMD_HOME)/zfs-auto-snapshot-daily.timer
+	install timers/zfs-auto-snapshot-weekly.service	$(DESTDIR)/$(SYSTEMD_HOME)/zfs-auto-snapshot-weekly.service
+	install timers/zfs-auto-snapshot-weekly.timer	$(DESTDIR)/$(SYSTEMD_HOME)/zfs-auto-snapshot-weekly.timer
+	install timers/zfs-auto-snapshot-monthly.service	$(DESTDIR)/$(SYSTEMD_HOME)/zfs-auto-snapshot-monthly.service
+	install timers/zfs-auto-snapshot-monthly.timer	$(DESTDIR)/$(SYSTEMD_HOME)/zfs-auto-snapshot-monthly.timer
 	install -d $(DESTDIR)$(PREFIX)/share/man/man8
 	install src/zfs-auto-snapshot.8 $(DESTDIR)$(PREFIX)/share/man/man8/zfs-auto-snapshot.8
 	install -d $(DESTDIR)$(PREFIX)/sbin
