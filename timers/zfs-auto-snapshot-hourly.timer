@@ -5,6 +5,7 @@ Description=ZFS hourly snapshot timer
 [Timer]
 OnCalendar=hourly
 Persistent=true
+RandomizedDelaySec=59
 
 [Install]
 WantedBy=timers.target

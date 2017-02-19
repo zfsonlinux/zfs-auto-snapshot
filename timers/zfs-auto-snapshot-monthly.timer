@@ -5,6 +5,7 @@ Description=ZFS monthly snapshot timer
 [Timer]
 OnCalendar=monthly
 Persistent=true
+RandomizedDelaySec=600
 
 [Install]
 WantedBy=timers.target

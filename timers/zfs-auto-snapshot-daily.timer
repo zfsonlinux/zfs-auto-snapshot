@@ -5,6 +5,7 @@ Description=ZFS daily snapshot timer
 [Timer]
 OnCalendar=daily
 Persistent=true
+RandomizedDelaySec=600
 
 [Install]
 WantedBy=timers.target

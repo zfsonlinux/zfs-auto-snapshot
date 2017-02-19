@@ -5,6 +5,7 @@ Description=ZFS frequent snapshot timer
 [Timer]
 OnCalendar=*:0/15
 Persistent=true
+RandomizedDelaySec=60
 
 [Install]
 WantedBy=timers.target
