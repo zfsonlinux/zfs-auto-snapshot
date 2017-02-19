@@ -1,0 +1,5 @@
+[Unit]
+Description=ZFS hourly snapshot service
+
+[Service]
+ExecStart=/usr/local/sbin/zfs-auto-snapshot --quiet --syslog --label=hourly --keep=24 //

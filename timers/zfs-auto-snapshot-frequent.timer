@@ -1,0 +1,8 @@
+# See systemd.timer and systemd.time manpages for details
+[Unit]
+Description=ZFS frequent snapshot timer
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+RandomizedDelaySec=60
