@@ -1,0 +1,10 @@
+# See systemd.timers and systemd.time manpages for details
+[Unit]
+Description=ZFS hourly snapshot timer
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target

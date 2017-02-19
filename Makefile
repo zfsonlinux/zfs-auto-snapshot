@@ -17,3 +17,20 @@ install:
 	install src/zfs-auto-snapshot.8 $(DESTDIR)$(PREFIX)/share/man/man8/zfs-auto-snapshot.8
 	install -d $(DESTDIR)$(PREFIX)/sbin
 	install src/zfs-auto-snapshot.sh $(DESTDIR)$(PREFIX)/sbin/zfs-auto-snapshot
+
+systemd:
+	install -d $(DESTDIR)/etc/systemd/system/
+	install timers/zfs-auto-snapshot-frequent.service	$(DESTDIR)/etc/systemd/system/zfs-auto-snapshot-frequent.service
+	install timers/zfs-auto-snapshot-frequent.timer	$(DESTDIR)/etc/systemd/system/zfs-auto-snapshot-frequent.timer
+	install timers/zfs-auto-snapshot-hourly.service	$(DESTDIR)/etc/systemd/system/zfs-auto-snapshot-hourly.service
+	install timers/zfs-auto-snapshot-hourly.timer	$(DESTDIR)/etc/systemd/system/zfs-auto-snapshot-hourly.timer
+	install timers/zfs-auto-snapshot-daily.service	$(DESTDIR)/etc/systemd/system/zfs-auto-snapshot-daily.service
+	install timers/zfs-auto-snapshot-daily.timer	$(DESTDIR)/etc/systemd/system/zfs-auto-snapshot-daily.timer
+	install timers/zfs-auto-snapshot-weekly.service	$(DESTDIR)/etc/systemd/system/zfs-auto-snapshot-weekly.service
+	install timers/zfs-auto-snapshot-weekly.timer	$(DESTDIR)/etc/systemd/system/zfs-auto-snapshot-weekly.timer
+	install timers/zfs-auto-snapshot-monthly.service	$(DESTDIR)/etc/systemd/system/zfs-auto-snapshot-monthly.service
+	install timers/zfs-auto-snapshot-monthly.timer	$(DESTDIR)/etc/systemd/system/zfs-auto-snapshot-monthly.timer
+	install -d $(DESTDIR)$(PREFIX)/share/man/man8
+	install src/zfs-auto-snapshot.8 $(DESTDIR)$(PREFIX)/share/man/man8/zfs-auto-snapshot.8
+	install -d $(DESTDIR)$(PREFIX)/sbin
+	install src/zfs-auto-snapshot.sh $(DESTDIR)$(PREFIX)/sbin/zfs-auto-snapshot

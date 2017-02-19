@@ -1,0 +1,5 @@
+[Unit]
+Description=ZFS monthly snapshot service
+
+[Service]
+ExecStart=/usr/bin/zfs-auto-snapshot  --quiet --syslog --label=monthly --keep=12 //
