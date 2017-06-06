@@ -1,2 +1,5 @@
 #!/bin/sh
-exec zfs-auto-snapshot --quiet --syslog --label=monthly --keep=12 //
+
+# Only call zfs-auto-snapshot if it's available
+exec which zfs-auto-snapshot > /dev/null && \
+     zfs-auto-snapshot --quiet --syslog --label=monthly --keep=12 //
