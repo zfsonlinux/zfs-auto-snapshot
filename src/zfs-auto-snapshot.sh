@@ -38,6 +38,7 @@ opt_sep='_'
 opt_setauto=''
 opt_syslog=''
 opt_skip_scrub=''
+opt_skip_readonly=''
 opt_verbose=''
 opt_pre_snapshot=''
 opt_post_snapshot=''
@@ -61,6 +62,7 @@ print_usage ()
       --fast         Use a faster zfs list invocation.
   -n, --dry-run      Print actions without actually doing anything.
   -s, --skip-scrub   Do not snapshot filesystems in scrubbing pools.
+  -w, --skip-readonly Do not snapshot filesystems which are readonly.
   -h, --help         Print this usage message.
   -k, --keep=NUM     Keep NUM recent snapshots and destroy older snapshots.
   -l, --label=LAB    LAB is usually 'hourly', 'daily', or 'monthly'.
@@ -208,11 +210,11 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 # {
 
 GETOPT=$(getopt \
-  --longoptions=default-exclude,dry-run,fast,skip-scrub,recursive \
+  --longoptions=default-exclude,dry-run,fast,skip-scrub,skip-readonly,recursive \
   --longoptions=event:,keep:,label:,prefix:,sep: \
   --longoptions=debug,help,quiet,syslog,verbose \
   --longoptions=pre-snapshot:,post-snapshot:,destroy-only \
-  --options=dnshe:l:k:p:rs:qgv \
+  --options=dnswhe:l:k:p:rs:qgv \
   -- "$@" ) \
   || exit 128
 
@@ -252,6 +254,10 @@ do
 			;;
 		(-s|--skip-scrub)
 			opt_skip_scrub='1'
+			shift 1
+			;;
+		(-w|--skip-readonly)
+			opt_skip_readonly='1'
 			shift 1
 			;;
 		(-h|--help)
@@ -481,6 +487,13 @@ do
 			continue 2
 		fi
 	done
+
+	# Exclude datasets with readonly=on if the --skip-readonly flag is set.
+	if [ -n "$opt_skip_readonly" ] && [ "$(zfs get -H -o value readonly $ii)" = "on" ]
+	then
+		print_log debug "Excluding $ii because it is readonly."
+		continue
+	fi
 
 	for jj in $NOAUTO
 	do
