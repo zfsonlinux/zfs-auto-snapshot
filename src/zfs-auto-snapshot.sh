@@ -42,6 +42,7 @@ opt_verbose=''
 opt_pre_snapshot=''
 opt_post_snapshot=''
 opt_do_snapshots=1
+opt_local_tz=''
 
 # Global summary statistics.
 DESTRUCTION_COUNT='0'
