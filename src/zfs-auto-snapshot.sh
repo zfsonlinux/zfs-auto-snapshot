@@ -449,6 +449,9 @@ do
 		if [ "$jj" = '//' -o "$jj" = "$ii" ]
 		then
 			IN_ARGS=$(( $IN_ARGS + 1 ))
+		elif [ -n "$opt_recursive" -a "$iii" != "${iii#$jjj}" ]
+		then
+			IN_ARGS=$(( $IN_ARGS + 1 ))
 		fi
 	done
 	if [ "$IN_ARGS" -eq '0' ]
