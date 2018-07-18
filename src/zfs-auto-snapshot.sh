@@ -42,6 +42,7 @@ opt_verbose=''
 opt_pre_snapshot=''
 opt_post_snapshot=''
 opt_do_snapshots=1
+opt_local_tz=''
 
 # Global summary statistics.
 DESTRUCTION_COUNT='0'
@@ -65,6 +66,8 @@ print_usage ()
   -k, --keep=NUM     Keep NUM recent snapshots and destroy older snapshots.
   -l, --label=LAB    LAB is usually 'hourly', 'daily', or 'monthly'.
   -p, --prefix=PRE   PRE is 'zfs-auto-snap' by default.
+      --local-tz     Use system's local timezone instead of UTC in snapshot
+                     names.
   -q, --quiet        Suppress warnings and notices at the console.
       --send-full=F  Send zfs full backup. Unimplemented.
       --send-incr=F  Send zfs incremental backup. Unimplemented.
@@ -210,7 +213,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 GETOPT=$(getopt \
   --longoptions=default-exclude,dry-run,fast,skip-scrub,recursive \
   --longoptions=event:,keep:,label:,prefix:,sep: \
-  --longoptions=debug,help,quiet,syslog,verbose \
+  --longoptions=local-tz,debug,help,quiet,syslog,verbose \
   --longoptions=pre-snapshot:,post-snapshot:,destroy-only \
   --options=dnshe:l:k:p:rs:qgv \
   -- "$@" ) \
@@ -285,6 +288,10 @@ do
 			done
 			opt_prefix="$2"
 			shift 2
+			;;
+		(--local-tz)
+			opt_local_tz='1'
+			shift 1
 			;;
 		(-q|--quiet)
 			opt_debug=''
@@ -536,7 +543,14 @@ SNAPPROP="-o com.sun:auto-snapshot-desc='$opt_event'"
 
 # ISO style date; fifteen characters: YYYY-MM-DD-HHMM
 # On Solaris %H%M expands to 12h34.
-DATE=$(date --utc +%F-%H%M)
+# If the --local-tz flag is set use the system's timezone.
+# Otherwise, the default is to use UTC.
+if [ -n "$opt_local_tz" ]
+then
+	DATE=$(date +%F-%H%M)
+else
+	DATE=$(date --utc +%F-%H%M)
+fi
 
 # The snapshot name after the @ symbol.
 SNAPNAME="$opt_prefix${opt_label:+$opt_sep$opt_label}-$DATE"
