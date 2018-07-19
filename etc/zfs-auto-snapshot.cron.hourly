@@ -1,6 +1,8 @@
 #!/bin/sh
 
-# Only call zfs-auto-snapshot if it's available
-which zfs-auto-snapshot > /dev/null || exit 0
+PATH="/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
 
-exec zfs-auto-snapshot --quiet --syslog --label=hourly --keep=24 //
+# Only call zfs-auto-snapshot if it's available
+which zfs-auto-snapshot > /dev/null || exit 1
+
+exec zfs-auto-snapshot --quiet --syslog --label=hourly --keep=25 --local-tz //
