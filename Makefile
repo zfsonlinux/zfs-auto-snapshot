@@ -17,3 +17,12 @@ install:
 	install -m 0644 src/zfs-auto-snapshot.8 $(DESTDIR)$(PREFIX)/share/man/man8/zfs-auto-snapshot.8
 	install -d $(DESTDIR)$(PREFIX)/sbin
 	install src/zfs-auto-snapshot.sh $(DESTDIR)$(PREFIX)/sbin/zfs-auto-snapshot
+
+uninstall:
+	rm $(DESTDIR)/etc/cron.d/zfs-auto-snapshot
+	rm $(DESTDIR)/etc/cron.hourly/zfs-auto-snapshot
+	rm $(DESTDIR)/etc/cron.daily/zfs-auto-snapshot
+	rm $(DESTDIR)/etc/cron.weekly/zfs-auto-snapshot
+	rm $(DESTDIR)/etc/cron.monthly/zfs-auto-snapshot
+	rm $(DESTDIR)$(PREFIX)/share/man/man8/zfs-auto-snapshot.8
+	rm $(DESTDIR)$(PREFIX)/sbin/zfs-auto-snapshot
