@@ -110,7 +110,7 @@ print_log () # level, message, ...
 			;;
 		(inf*)
 			# test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.info $*
-			test -z ${opt_quiet+x} && test -n "$opt_verbose" && echo $*
+			test -z "$opt_quiet" && test -n "$opt_verbose" && echo $*
 			;;
 		(deb*)
 			# test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.debug $*
