@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # zfs-auto-snapshot for Linux
 # Automatically create, rotate, and destroy periodic ZFS snapshots.
