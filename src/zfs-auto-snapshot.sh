@@ -39,6 +39,9 @@ opt_setauto=''
 opt_syslog=''
 opt_skip_scrub=''
 opt_verbose=''
+opt_pre_snapshot=''
+opt_post_snapshot=''
+opt_do_snapshots=1
 
 # Global summary statistics.
 DESTRUCTION_COUNT='0'
@@ -69,6 +72,7 @@ print_usage ()
   -g, --syslog       Write messages into the system log.
   -r, --recursive    Snapshot named filesystem and all descendants.
   -v, --verbose      Print info messages.
+      --destroy-only Only destroy older snapshots, do not create new ones.
       name           Filesystem and volume names, or '//' for all ZFS datasets.
 " 
 }
@@ -106,7 +110,7 @@ print_log () # level, message, ...
 			;;
 		(inf*)
 			# test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.info $*
-			test -n "$opt_verbose" && echo $*
+			test -z ${opt_quiet+x} && test -n "$opt_verbose" && echo $*
 			;;
 		(deb*)
 			# test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.debug $*
@@ -149,7 +153,8 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 	local TARGETS="$5"
 	local KEEP=''
 	local LABEL="$6"
-	
+	local RUNSNAP=1
+
 	# global DESTRUCTION_COUNT
 	# global SNAPSHOT_COUNT
 	# global WARNING_COUNT
@@ -157,13 +162,21 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 
 	for ii in $TARGETS
 	do
-		if do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'" 
+		if [ -n "$opt_do_snapshots" ]
 		then
-			SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT + 1 ))
-		else
-			WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
-			continue
-		fi 
+			if [ "$opt_pre_snapshot" != "" ]
+			then
+				do_run "$opt_pre_snapshot $ii $NAME" || RUNSNAP=0
+			fi
+			if [ $RUNSNAP -eq 1 ] && do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'"
+			then
+				[ "$opt_post_snapshot" != "" ] && do_run "$opt_post_snapshot $ii $NAME"
+				SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT + 1 ))
+			else
+				WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
+				continue
+			fi 
+		fi
 
 		# Retain at most $opt_keep number of old snapshots of this filesystem,
 		# including the one that was just recently created.
@@ -183,7 +196,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 				KEEP=$(( $KEEP - 1 ))
 				if [ "$KEEP" -le '0' ]
 				then
-					if do_run "zfs destroy $FLAGS '${arrjj[1]}'" 
+					if do_run "zfs destroy -d $FLAGS '${arrjj[1]}'" 
 					then
 						DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
 					else
@@ -203,6 +216,7 @@ GETOPT=$(getopt \
   --longoptions=default-exclude,dry-run,fast,skip-scrub,recursive \
   --longoptions=event:,keep:,label:,prefix:,sep: \
   --longoptions=debug,help,quiet,syslog,verbose \
+  --longoptions=pre-snapshot:,post-snapshot:,destroy-only \
   --options=dnshe:l:k:p:rs:qgv \
   -- "$@" ) \
   || exit 128
@@ -313,6 +327,18 @@ do
 			opt_verbose='1'
 			shift 1
 			;;
+		(--pre-snapshot)
+			opt_pre_snapshot="$2"
+			shift 2
+			;;
+		(--post-snapshot)
+			opt_post_snapshot="$2"
+			shift 2
+			;;
+		(--destroy-only)
+			opt_do_snapshots=''
+			shift 1
+			;;
 		(--)
 			shift 1
 			break
@@ -346,16 +372,21 @@ fi
 ZPOOL_STATUS=$(env LC_ALL=C zpool status 2>&1 ) \
   || { print_log error "zpool status $?: $ZPOOL_STATUS"; exit 135; }
 
+
 ZFS_LIST=$(env LC_ALL=C zfs list -H -t filesystem,volume -s name \
   -o name,com.sun:auto-snapshot,com.sun:auto-snapshot:"$opt_label") \
   || { print_log error "zfs list $?: $ZFS_LIST"; exit 136; }
 
 if [ -n "$opt_fast_zfs_list" ]
 then
-	SNAPSHOTS_OLD=$(env LC_ALL=C zfs list -H -t snapshot -o com.sun:auto-snapshot-label,name -s name|grep $opt_prefix |awk '{ print substr( $0, length($0) - 14, length($0) ) " " $0}' |sort -r -k1,1 -k3,2|awk '{ print substr( $0, 17, length($0) )}') \
+ 	SNAPSHOTS_OLD=$(env LC_ALL=C zfs list -H -t snapshot -o com.sun:auto-snapshot-label,name -s name | \
+		grep $opt_prefix | \
+		awk '{ print substr( $0, length($0) - 14, length($0) ) " " $0}' | \
+		sort -r -k1,1 -k3,2 | \
+		awk '{ print substr( $0, 17, length($0) )}') \
 	  || { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
 else
-	SNAPSHOTS_OLD=$(env LC_ALL=C zfs list -H -t snapshot -S creation -o com.sun:auto-snapshot-label,name) \
+        SNAPSHOTS_OLD=$(env LC_ALL=C zfs list -H -t snapshot -S creation -o com.sun:auto-snapshot-label,name) \
 	  || { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
 fi
 
@@ -415,7 +446,8 @@ do
 	# Just testing "$ii" != ${ii#$jj} would incorrectly match.
 	iii="$ii/"
 
-	# Exclude datasets that are not named on the command line.
+
+    # Exclude datasets that are not named on the command line.
 	IN_ARGS='0'
 	for jj in "$@"
 	do
@@ -517,11 +549,28 @@ SNAPNAME="$opt_prefix$opt_sep$DATE"
 # The expression for matching old snapshots.  -YYYY-MM-DD-HHMM
 SNAPGLOB="${opt_prefix}????????????????"
 
-test -n "$TARGETS_REGULAR" \
-  && print_log info "Doing regular snapshots of $TARGETS_REGULAR"
+if [ -n "$opt_do_snapshots" ]
+then
+	test -n "$TARGETS_REGULAR" \
+	  && print_log info "Doing regular snapshots of $TARGETS_REGULAR"
 
-test -n "$TARGETS_RECURSIVE" \
-  && print_log info "Doing recursive snapshots of $TARGETS_RECURSIVE"
+	test -n "$TARGETS_RECURSIVE" \
+	  && print_log info "Doing recursive snapshots of $TARGETS_RECURSIVE"
+
+	if test -n "$opt_keep" && [ "$opt_keep" -ge "1" ]
+	then
+		print_log info "Destroying all but the newest $opt_keep snapshots of each dataset."
+	fi
+elif test -n "$opt_keep" && [ "$opt_keep" -ge "1" ]
+then
+	test -n "$TARGETS_REGULAR" \
+	  && print_log info "Destroying all but the newest $opt_keep snapshots of $TARGETS_REGULAR"
+
+	test -n "$TARGETS_RECURSIVE" \
+	  && print_log info "Recursively destroying all but the newest $opt_keep snapshots of $TARGETS_RECURSIVE"
+else
+	print_log notice "Only destroying snapshots, but count of snapshots to preserve not given. Nothing to do."
+fi
 
 test -n "$opt_dry_run" \
   && print_log info "Doing a dry run. Not running these commands..."
