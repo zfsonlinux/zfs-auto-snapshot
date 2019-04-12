@@ -464,11 +464,19 @@ do
 	iii="$ii/"
 
 
-        # Exclude datasets that are not named on the command line.
+	# Exclude datasets
+	# * that are not named on the command line or
+	# * those whose prefix is not on the command line (if --recursive flag is set)
 	IN_ARGS='0'
 	for jj in "$@"
 	do
+		# Ibid regarding iii.
+		jjj="$jj/"
+
 		if [ "$jj" = '//' -o "$jj" = "$ii" ]
+		then
+			IN_ARGS=$(( $IN_ARGS + 1 ))
+		elif [ -n "$opt_recursive" -a "$iii" != "${iii#$jjj}" ]
 		then
 			IN_ARGS=$(( $IN_ARGS + 1 ))
 		fi
