@@ -85,6 +85,10 @@ snapshot all datasets, then run post-snapshot
 command(s) and clean up with zfs-auto-snapshot
 \fB\-\-destroy-only\fR.
 .TP
+\fB\-L\fR, \fB\-\-localtime\fR
+Use local time instead of UTC for snapshot names. In this case
+the timezone abbreviation is added to the name.
+.TP
 name
 Filesystem and volume names, or '//' for all ZFS datasets.
 .SH SEE ALSO
