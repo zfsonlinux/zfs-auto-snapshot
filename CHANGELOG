@@ -1,0 +1,9 @@
+[ 1.2.5 (Unreleased) ]
+
+ * Start a changelog
+ * Accept PR#94 from aimileus/macos
+   - Replace --utc longform option with -u for macos compatibility
+ * Accept PR#107 from ArakniD/master
+   - Add optional label for snap removals
+
+ -- Jonathan Carter 2019-09-25, 15:24 SAST
