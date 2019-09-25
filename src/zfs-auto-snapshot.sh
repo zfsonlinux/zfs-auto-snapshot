@@ -191,7 +191,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 			else
 				WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
 				continue
-			fi 
+			fi
 		fi
 
 		# Retain at most $opt_keep number of old snapshots of this filesystem,
@@ -208,7 +208,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 				KEEP=$(( $KEEP - 1 ))
 				if [ "$KEEP" -le '0' ]
 				then
-					if do_run "zfs destroy -d $FLAGS '$jj'" 
+					if do_run "zfs destroy -d $FLAGS '$jj'"
 					then
 						DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
 					else
@@ -325,7 +325,7 @@ do
 			shift 1
 			;;
 		(--sep)
-			case "$2" in 
+			case "$2" in
 				([[:alnum:]_.:\ -])
 					:
 					;;
@@ -373,7 +373,7 @@ if [ "$#" -eq '0' ]
 then
 	print_log error "The filesystem argument list is empty."
 	exit 133
-fi 
+fi
 
 # Count the number of times '//' appears on the command line.
 SLASHIES='0'
