@@ -38,7 +38,7 @@ opt_sep='_'
 opt_setauto=''
 opt_syslog=''
 opt_skip_scrub=''
-opt_verbose=''
+opt_verbose='0'
 opt_pre_snapshot=''
 opt_post_snapshot=''
 opt_do_snapshots=1
@@ -111,7 +111,7 @@ print_log () # level, message, ...
 			;;
 		(inf*)
 			# test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.info $*
-			test -z "$opt_quiet" && test -n "$opt_verbose" && echo $*
+			test -z "$opt_quiet" && [ $opt_verbose -gt 0 ]   && echo $*
 			;;
 		(deb*)
 			# test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.debug $*
@@ -317,7 +317,7 @@ do
 		(-q|--quiet)
 			opt_debug=''
 			opt_quiet='1'
-			opt_verbose=''
+			opt_verbose='0'
 			shift 1
 			;;
 		(-r|--recursive)
