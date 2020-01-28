@@ -208,19 +208,20 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 		do
 			# Check whether this is an old snapshot of the filesystem.
 			trunc="$ii@$NAMETRUNC"
-			if [ "${jj:0:${#trunc}}" = "$trunc" ]
-			then
-				KEEP=$(( $KEEP - 1 ))
-				if [ "$KEEP" -le '0' ]
-				then
-					if do_run "zfs destroy -d $FLAGS '$jj'" 
+			case "${jj}" in
+				(${trunc}*)
+					KEEP=$(( $KEEP - 1 ))
+					if [ "$KEEP" -le '0' ]
 					then
-						DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
-					else
-						WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
+						if do_run "zfs destroy -d $FLAGS '$jj'" 
+						then
+							DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
+						else
+							WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
+						fi
 					fi
-				fi
-			fi
+					;;
+			esac
 		done
 	done
 }
