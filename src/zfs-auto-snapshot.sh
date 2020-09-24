@@ -441,14 +441,14 @@ done
 
 # Get a list of pools that are being scrubbed.
 ZPOOLS_SCRUBBING=$(echo "$ZPOOL_STATUS" | awk -F ': ' \
-  '$1 ~ /^ *pool$/ { pool = $2 } ; \
+  '$1 ~ /^ *pool$/ { pool = $2 } ;
    $1 ~ /^ *scan$/ && $2 ~ /scrub in progress/ { print pool }' \
   | sort ) 
 
 # Get a list of pools that cannot do a snapshot.
 ZPOOLS_NOTREADY=$(echo "$ZPOOL_STATUS" | awk -F ': ' \
-  '$1 ~ /^ *pool$/ { pool = $2 } ; \
-   $1 ~ /^ *state$/ && $2 !~ /ONLINE|DEGRADED/ { print pool } ' \
+  '$1 ~ /^ *pool$/ { pool = $2 } ;
+   $1 ~ /^ *state$/ && $2 !~ /^(ONLINE|DEGRADED)$/ { print pool } ' \
   | sort)
 
 # Get a list of datasets for which snapshots are explicitly disabled.
