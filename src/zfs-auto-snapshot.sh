@@ -24,8 +24,6 @@ IFS="
 "
 
 # Set default program options.
-opt_backup_full=''
-opt_backup_incremental=''
 opt_default_exclude=''
 opt_dry_run=''
 opt_event='-'
@@ -35,7 +33,6 @@ opt_label=''
 opt_prefix='zfs-auto-snap'
 opt_recursive=''
 opt_sep='_'
-opt_setauto=''
 opt_syslog=''
 opt_skip_scrub=''
 opt_verbose=''
@@ -75,7 +72,7 @@ print_usage ()
   -v, --verbose      Print info messages.
       --destroy-only Only destroy older snapshots, do not create new ones.
       name           Filesystem and volume names, or '//' for all ZFS datasets.
-" 
+"
 }
 
 
@@ -86,40 +83,40 @@ print_log () # level, message, ...
 
 	case $LEVEL in
 		(eme*)
-			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.emerge $*
-			echo Emergency: $* 1>&2
+			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.emerge "$@"
+			echo Emergency: "$@" 1>&2
 			;;
 		(ale*)
-			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.alert $*
-			echo Alert: $* 1>&2
+			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.alert "$@"
+			echo Alert: "$@" 1>&2
 			;;
 		(cri*)
-			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.crit $*
-			echo Critical: $* 1>&2
+			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.crit "$@"
+			echo Critical: "$@" 1>&2
 			;;
 		(err*)
-			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.err $*
-			echo Error: $* 1>&2
+			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.err "$@"
+			echo Error: "$@" 1>&2
 			;;
 		(war*)
-			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.warning $*
-			test -z "$opt_quiet" && echo Warning: $* 1>&2
+			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.warning "$@"
+			test -z "$opt_quiet" && echo Warning: "$@" 1>&2
 			;;
 		(not*)
-			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.notice $*
-			test -z "$opt_quiet" && echo $*
+			test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.notice "$@"
+			test -z "$opt_quiet" && echo "$@"
 			;;
 		(inf*)
-			# test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.info $*
-			test -z "$opt_quiet" && test -n "$opt_verbose" && echo $*
+			# test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.info "$@"
+			test -z "$opt_quiet" && test -n "$opt_verbose" && echo "$@"
 			;;
 		(deb*)
-			# test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.debug $*
-			test -n "$opt_debug" && echo Debug: $*
+			# test -n "$opt_syslog" && logger -t "$opt_prefix" -p daemon.debug "$@"
+			test -n "$opt_debug" && echo Debug: "$@"
 			;;
 		(*)
-			test -n "$opt_syslog" && logger -t "$opt_prefix" $*
-			echo $* 1>&2
+			test -n "$opt_syslog" && logger -t "$opt_prefix" "$@"
+			echo "$@" 1>&2
 			;;
 	esac
 }
@@ -129,10 +126,10 @@ do_run () # [argv]
 {
 	if [ -n "$opt_dry_run" ]
 	then
-		echo $*
+		echo "$@"
 		RC="$?"
 	else
-		eval $*
+		eval "$@"
 		RC="$?"
 		if [ "$RC" -eq '0' ]
 		then
@@ -147,13 +144,13 @@ do_run () # [argv]
 
 do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 {
-	local PROPS="$1"
-	local FLAGS="$2"
-	local NAME="$3"
-	local GLOB="$4"
-	local TARGETS="$5"
-	local KEEP=''
-	local RUNSNAP=1
+	PROPS="$1"
+	FLAGS="$2"
+	NAME="$3"
+	GLOB="$4"
+	TARGETS="$5"
+	KEEP=''
+	RUNSNAP=1
 
 	# global DESTRUCTION_COUNT
 	# global SNAPSHOT_COUNT
@@ -166,8 +163,8 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
                 size_check_skip=0
                 if [ "$opt_min_size" -gt 0 ]
                 then
-                        bytes_written=`zfs get -Hp -o value written $ii`
-                        kb_written=$(( $bytes_written / 1024 ))
+                        bytes_written="$(zfs get -Hp -o value written "$ii")"
+                        kb_written=$(( bytes_written / 1024 ))
                         if [ "$kb_written" -lt "$opt_min_size" ]
                         then
                                 size_check_skip=1
@@ -178,7 +175,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
                         fi
                 fi
 
-                if [ -n "$opt_do_snapshots" -a "$size_check_skip" -eq 0 ]
+                if [ -n "$opt_do_snapshots" ] && [ "$size_check_skip" -eq 0 ]
 		then
 			if [ "$opt_pre_snapshot" != "" ]
 			then
@@ -187,9 +184,9 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 			if [ $RUNSNAP -eq 1 ] && do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'"
 			then
 				[ "$opt_post_snapshot" != "" ] && do_run "$opt_post_snapshot $ii $NAME"
-				SNAPSHOT_COUNT=$(( $SNAPSHOT_COUNT + 1 ))
+				SNAPSHOT_COUNT=$(( SNAPSHOT_COUNT + 1 ))
 			else
-				WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
+				WARNING_COUNT=$(( WARNING_COUNT + 1 ))
 				continue
 			fi
 		fi
@@ -205,14 +202,14 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 			# Check whether this is an old snapshot of the filesystem.
 			if [ -z "${jj#$ii@$GLOB}" ]
 			then
-				KEEP=$(( $KEEP - 1 ))
+				KEEP=$(( KEEP - 1 ))
 				if [ "$KEEP" -le '0' ]
 				then
 					if do_run "zfs destroy -d $FLAGS '$jj'"
 					then
-						DESTRUCTION_COUNT=$(( $DESTRUCTION_COUNT + 1 ))
+						DESTRUCTION_COUNT=$(( DESTRUCTION_COUNT + 1 ))
 					else
-						WARNING_COUNT=$(( $WARNING_COUNT + 1 ))
+						WARNING_COUNT=$(( WARNING_COUNT + 1 ))
 					fi
 				fi
 			fi
@@ -379,10 +376,10 @@ fi
 SLASHIES='0'
 for ii in "$@"
 do
-	test "$ii" = '//' && SLASHIES=$(( $SLASHIES + 1 ))
+	test "$ii" = '//' && SLASHIES=$(( SLASHIES + 1 ))
 done
 
-if [ "$#" -gt '1' -a "$SLASHIES" -gt '0' ]
+if [ "$#" -gt '1' ] && [ "$SLASHIES" -gt '0' ]
 then
 	print_log error "The // must be the only argument if it is given."
 	exit 134
@@ -414,7 +411,7 @@ then
 	  	|| { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
 	else
  		SNAPSHOTS_OLD=$(env LC_ALL=C zfs list -H -t snapshot -o name -s name | \
-			grep $opt_prefix | \
+			grep "$opt_prefix" | \
 			awk '{ print substr( $0, length($0) - 14, length($0) ) " " $0}' | \
 			sort -r -k1,1 -k2,2 | \
 			awk '{ print substr( $0, 17, length($0) )}') \
@@ -429,7 +426,8 @@ fi
 for ii in "$@"
 do
 	test "$ii" = '//' && continue 1
-	while read NAME PROPERTIES
+	# shellcheck disable=SC2034
+	while read -r NAME PROPERTIES
 	do
 		test "$ii" = "$NAME" && continue 2
 	done <<-HERE
@@ -441,14 +439,14 @@ done
 
 # Get a list of pools that are being scrubbed.
 ZPOOLS_SCRUBBING=$(echo "$ZPOOL_STATUS" | awk -F ': ' \
-  '$1 ~ /^ *pool$/ { pool = $2 } ; \
+  '$1 ~ /^ *pool$/ { pool = $2 } ;
    $1 ~ /^ *scan$/ && $2 ~ /scrub in progress/ { print pool }' \
-  | sort ) 
+  | sort )
 
 # Get a list of pools that cannot do a snapshot.
 ZPOOLS_NOTREADY=$(echo "$ZPOOL_STATUS" | awk -F ': ' \
-  '$1 ~ /^ *pool$/ { pool = $2 } ; \
-   $1 ~ /^ *state$/ && $2 !~ /ONLINE|DEGRADED/ { print pool } ' \
+  '$1 ~ /^ *pool$/ { pool = $2 } ;
+   $1 ~ /^ *state$/ && $2 !~ /^(ONLINE|DEGRADED)$/ { print pool } ' \
   | sort)
 
 # Get a list of datasets for which snapshots are explicitly disabled.
@@ -491,12 +489,12 @@ do
 		# Ibid regarding iii.
 		jjj="$jj/"
 
-		if [ "$jj" = '//' -o "$jj" = "$ii" ]
+		if [ "$jj" = '//' ] || [ "$jj" = "$ii" ]
 		then
-			IN_ARGS=$(( $IN_ARGS + 1 ))
-		elif [ -n "$opt_recursive" -a "$iii" != "${iii#$jjj}" ]
+			IN_ARGS=$(( IN_ARGS + 1 ))
+		elif [ -n "$opt_recursive" ] && [ "$iii" != "${iii#$jjj}" ]
 		then
-			IN_ARGS=$(( $IN_ARGS + 1 ))
+			IN_ARGS=$(( IN_ARGS + 1 ))
 		fi
 	done
 	if [ "$IN_ARGS" -eq '0' ]
@@ -538,7 +536,7 @@ do
 		jjj="$jj/"
 
 		# The --recursive switch only matters for non-wild arguments.
-		if [ -z "$opt_recursive" -a "$1" != '//' ]
+		if [ -z "$opt_recursive" ] && [ "$1" != '//' ]
 		then
 			# Snapshot this dataset non-recursively.
 			print_log debug "Including $ii for regular snapshot."
