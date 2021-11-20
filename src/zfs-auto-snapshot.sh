@@ -182,7 +182,7 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 		then
 			if [ "$opt_pre_snapshot" != "" ]
 			then
-				do_run "$opt_pre_snapshot $ii $NAME" || RUNSNAP=0
+				do_run "$opt_pre_snapshot $ii $NAME" && RUNSNAP=1 || RUNSNAP=0
 			fi
 			if [ $RUNSNAP -eq 1 ] && do_run "zfs snapshot $PROPS $FLAGS '$ii@$NAME'"
 			then
