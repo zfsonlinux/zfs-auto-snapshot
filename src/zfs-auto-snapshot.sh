@@ -567,15 +567,24 @@ do
 		fi
 	done
 
-	# Append this candidate to the recursive snapshot list because it:
+	# Append this candidate to the snapshot list because it:
 	#
 	#   * Does not have an exclusionary property.
 	#   * Is in a pool that can currently do snapshots.
-	#   * Does not have an excluded descendent filesystem.
-	#   * Is not the descendant of an already included filesystem.
 	#
-	print_log debug "Including $ii for recursive snapshot."
-	TARGETS_RECURSIVE="${TARGETS_RECURSIVE:+$TARGETS_RECURSIVE	}$ii" # nb: \t
+	if [ -z "$opt_recursive" ]
+	then
+		print_log debug "Including $ii for regular snapshot."
+		TARGETS_REGULAR="${TARGETS_REGULAR:+$TARGETS_REGULAR	}$ii" # nb: \t
+	else
+		# Append this candidate to the recursive snapshot list because it additionally:
+		#
+		#   * Does not have an excluded descendent filesystem.
+		#   * Is not the descendant of an already included filesystem.
+		#
+		print_log debug "Including $ii for recursive snapshot."
+		TARGETS_RECURSIVE="${TARGETS_RECURSIVE:+$TARGETS_RECURSIVE	}$ii" # nb: \t
+	fi
 done
 
 # Linux lacks SMF and the notion of an FMRI event, but always set this property
