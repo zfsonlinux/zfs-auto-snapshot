@@ -463,9 +463,11 @@ then
 	CANDIDATES=$(echo "$ZFS_LIST" | awk -F '\t' \
 	  'tolower($2) ~ /true/ || tolower($3) ~ /true/ {print $1}')
 else
-	# Invert the NOAUTO list.
+	# Get a list of datasets for which snapshots are either not explicitly
+ 	# disabled, or explicitly enabled for the specific label.
 	CANDIDATES=$(echo "$ZFS_LIST" | awk -F '\t' \
-	  'tolower($2) !~ /false/ && tolower($3) !~ /false/ {print $1}')
+	  '(tolower($2) !~ /false/ && tolower($3) !~ /false/) \
+	  || tolower($3) ~ /true/ {print $1}')
 fi
 
 # Initialize the list of datasets that will get a recursive snapshot.
