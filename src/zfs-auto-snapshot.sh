@@ -162,23 +162,23 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 
 	for ii in $TARGETS
 	do
-                # Check if size check is > 0
-                size_check_skip=0
-                if [ "$opt_min_size" -gt 0 ]
-                then
-                        bytes_written=`zfs get -Hp -o value written $ii`
-                        kb_written=$(( $bytes_written / 1024 ))
-                        if [ "$kb_written" -lt "$opt_min_size" ]
-                        then
-                                size_check_skip=1
-                                if [ $opt_verbose -gt 0 ]
-                                then
-                                        echo "Skipping target $ii, only $kb_written kB written since last snap. opt_min_size is $opt_min_size"
-                                fi
-                        fi
-                fi
+		# Check if size check is > 0
+		size_check_skip=0
+		if [ "$opt_min_size" -gt 0 ]
+		then
+			bytes_written=`zfs get -Hp -o value written $ii`
+			kb_written=$(( $bytes_written / 1024 ))
+			if [ "$kb_written" -lt "$opt_min_size" ]
+			then
+				size_check_skip=1
+				if [ $opt_verbose -gt 0 ]
+				then
+					echo "Skipping target $ii, only $kb_written kB written since last snap. opt_min_size is $opt_min_size"
+				fi
+			fi
+		fi
 
-                if [ -n "$opt_do_snapshots" -a "$size_check_skip" -eq 0 ]
+		if [ -n "$opt_do_snapshots" -a "$size_check_skip" -eq 0 ]
 		then
 			if [ "$opt_pre_snapshot" != "" ]
 			then
@@ -225,20 +225,20 @@ do_snapshots () # properties, flags, snapname, oldglob, [targets...]
 # {
 
 if [ "$(uname)" = "Darwin" ]; then
-  GETOPT_BIN="$(brew --prefix gnu-getopt 2> /dev/null || echo /usr/local)/bin/getopt"
+	GETOPT_BIN="$(brew --prefix gnu-getopt 2> /dev/null || echo /usr/local)/bin/getopt"
 else
-  GETOPT_BIN="getopt"
+	GETOPT_BIN="getopt"
 fi
 
 GETOPT=$($GETOPT_BIN \
-  --longoptions=default-exclude,dry-run,fast,skip-scrub,recursive \
-  --longoptions=event:,keep:,label:,prefix:,sep: \
-  --longoptions=debug,help,quiet,syslog,verbose \
-  --longoptions=pre-snapshot:,post-snapshot:,destroy-only \
-  --longoptions=min-size: \
-  --options=dnshe:l:k:p:rs:qgvm: \
-  -- "$@" ) \
-  || exit 128
+	--longoptions=default-exclude,dry-run,fast,skip-scrub,recursive \
+	--longoptions=event:,keep:,label:,prefix:,sep: \
+	--longoptions=debug,help,quiet,syslog,verbose \
+	--longoptions=pre-snapshot:,post-snapshot:,destroy-only \
+	--longoptions=min-size: \
+	--options=dnshe:l:k:p:rs:qgvm: \
+	-- "$@" ) \
+	|| exit 128
 
 eval set -- "$GETOPT"
 
@@ -393,12 +393,12 @@ fi
 # Solaris implementation.
 
 ZPOOL_STATUS=$(env LC_ALL=C zpool status 2>&1 ) \
-  || { print_log error "zpool status $?: $ZPOOL_STATUS"; exit 135; }
+	|| { print_log error "zpool status $?: $ZPOOL_STATUS"; exit 135; }
 
 
 ZFS_LIST=$(env LC_ALL=C zfs list -H -t filesystem,volume -s name \
-  -o name,com.sun:auto-snapshot,com.sun:auto-snapshot:"$opt_label") \
-  || { print_log error "zfs list $?: $ZFS_LIST"; exit 136; }
+	-o name,com.sun:auto-snapshot,com.sun:auto-snapshot:"$opt_label") \
+	|| { print_log error "zfs list $?: $ZFS_LIST"; exit 136; }
 
 if [ -n "$opt_fast_zfs_list" ]
 then
@@ -411,18 +411,18 @@ then
 			awk '{ print substr( $0, length($0) - 14, length($0) ) " " $0}' | \
 			sort -r -k1,1 -k2,2 | \
 			awk '{ print substr( $0, 17, length($0) )}') \
-	  	|| { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
+			|| { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
 	else
  		SNAPSHOTS_OLD=$(env LC_ALL=C zfs list -H -t snapshot -o name -s name | \
 			grep $opt_prefix | \
 			awk '{ print substr( $0, length($0) - 14, length($0) ) " " $0}' | \
 			sort -r -k1,1 -k2,2 | \
 			awk '{ print substr( $0, 17, length($0) )}') \
-	  	|| { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
+			|| { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
 	fi
 else
-        SNAPSHOTS_OLD=$(env LC_ALL=C zfs list -H -t snapshot -S creation -o name) \
-	  || { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
+	SNAPSHOTS_OLD=$(env LC_ALL=C zfs list -H -t snapshot -S creation -o name) \
+		|| { print_log error "zfs list $?: $SNAPSHOTS_OLD"; exit 137; }
 fi
 
 # Verify that each argument is a filesystem or volume.
@@ -441,19 +441,19 @@ done
 
 # Get a list of pools that are being scrubbed.
 ZPOOLS_SCRUBBING=$(echo "$ZPOOL_STATUS" | awk -F ': ' \
-  '$1 ~ /^ *pool$/ { pool = $2 } ; \
-   $1 ~ /^ *scan$/ && $2 ~ /scrub in progress/ { print pool }' \
-  | sort ) 
+	'$1 ~ /^ *pool$/ { pool = $2 } ; \
+	$1 ~ /^ *scan$/ && $2 ~ /scrub in progress/ { print pool }' \
+	| sort ) 
 
 # Get a list of pools that cannot do a snapshot.
 ZPOOLS_NOTREADY=$(echo "$ZPOOL_STATUS" | awk -F ': ' \
-  '$1 ~ /^ *pool$/ { pool = $2 } ; \
-   $1 ~ /^ *state$/ && $2 !~ /ONLINE|DEGRADED/ { print pool } ' \
-  | sort)
+	'$1 ~ /^ *pool$/ { pool = $2 } ; \
+	$1 ~ /^ *state$/ && $2 !~ /ONLINE|DEGRADED/ { print pool } ' \
+	| sort)
 
 # Get a list of datasets for which snapshots are explicitly disabled.
 NOAUTO=$(echo "$ZFS_LIST" | awk -F '\t' \
-  'tolower($2) ~ /false/ || tolower($3) ~ /false/ {print $1}')
+	'tolower($2) ~ /false/ || tolower($3) ~ /false/ {print $1}')
 
 # If the --default-exclude flag is set, then exclude all datasets that lack
 # an explicit com.sun:auto-snapshot* property. Otherwise, include them.
@@ -461,11 +461,11 @@ if [ -n "$opt_default_exclude" ]
 then
 	# Get a list of datasets for which snapshots are explicitly enabled.
 	CANDIDATES=$(echo "$ZFS_LIST" | awk -F '\t' \
-	  'tolower($2) ~ /true/ || tolower($3) ~ /true/ {print $1}')
+		'tolower($2) ~ /true/ || tolower($3) ~ /true/ {print $1}')
 else
 	# Invert the NOAUTO list.
 	CANDIDATES=$(echo "$ZFS_LIST" | awk -F '\t' \
-	  'tolower($2) !~ /false/ && tolower($3) !~ /false/ {print $1}')
+		'tolower($2) !~ /false/ && tolower($3) !~ /false/ {print $1}')
 fi
 
 # Initialize the list of datasets that will get a recursive snapshot.
@@ -596,10 +596,10 @@ SNAPGLOB="${opt_prefix:+$opt_prefix$opt_sep}${opt_label:+$opt_label}-???????????
 if [ -n "$opt_do_snapshots" ]
 then
 	test -n "$TARGETS_REGULAR" \
-	  && print_log info "Doing regular snapshots of $TARGETS_REGULAR"
+		&& print_log info "Doing regular snapshots of $TARGETS_REGULAR"
 
 	test -n "$TARGETS_RECURSIVE" \
-	  && print_log info "Doing recursive snapshots of $TARGETS_RECURSIVE"
+		&& print_log info "Doing recursive snapshots of $TARGETS_RECURSIVE"
 
 	if test -n "$opt_keep" && [ "$opt_keep" -ge "1" ]
 	then
@@ -608,24 +608,24 @@ then
 elif test -n "$opt_keep" && [ "$opt_keep" -ge "1" ]
 then
 	test -n "$TARGETS_REGULAR" \
-	  && print_log info "Destroying all but the newest $opt_keep snapshots of $TARGETS_REGULAR"
+		&& print_log info "Destroying all but the newest $opt_keep snapshots of $TARGETS_REGULAR"
 
 	test -n "$TARGETS_RECURSIVE" \
-	  && print_log info "Recursively destroying all but the newest $opt_keep snapshots of $TARGETS_RECURSIVE"
+		&& print_log info "Recursively destroying all but the newest $opt_keep snapshots of $TARGETS_RECURSIVE"
 else
 	print_log notice "Only destroying snapshots, but count of snapshots to preserve not given. Nothing to do."
 fi
 
 test -n "$opt_dry_run" \
-  && print_log info "Doing a dry run. Not running these commands..."
+	&& print_log info "Doing a dry run. Not running these commands..."
 
 do_snapshots "$SNAPPROP" ""   "$SNAPNAME" "$SNAPGLOB" "$TARGETS_REGULAR"
 do_snapshots "$SNAPPROP" "-r" "$SNAPNAME" "$SNAPGLOB" "$TARGETS_RECURSIVE"
 
 print_log notice "@$SNAPNAME," \
-  "$SNAPSHOT_COUNT created," \
-  "$DESTRUCTION_COUNT destroyed," \
-  "$WARNING_COUNT warnings."
+	"$SNAPSHOT_COUNT created," \
+	"$DESTRUCTION_COUNT destroyed," \
+	"$WARNING_COUNT warnings."
 
 exit 0
 # }
